@@ -3,5 +3,5 @@ services:
     name: fifa07-elo-bot
     runtime: python
     pythonVersion: 3.10.5
-    buildCommand: ""
+    buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
