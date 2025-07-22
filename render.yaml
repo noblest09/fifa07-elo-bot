@@ -2,6 +2,6 @@ services:
   - type: web
     name: fifa07-elo-bot
     runtime: python
-    pythonVersion: 3.10
+    pythonVersion: 3.10.5
     buildCommand: ""
     startCommand: python bot.py
