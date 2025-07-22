@@ -115,7 +115,8 @@ def start(update: Update, context: CallbackContext):
     update.message.reply_text("👋 Salom! Reyting bot ishga tushdi.")
 
 def main():
-    TOKEN = "7288273012:AAGBEa9BoJocxiRhIrLcnxzRoag-2HZRy40"
+    TOKEN = os.environ["TELEGRAM_TOKEN"]
+
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("restart", restart))
