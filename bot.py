@@ -7,6 +7,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
+
 sheet = client.open_by_key("108hVJMPQNTYfrdUV1VOFXgi_v144jev0DeZiaUm4How").sheet1
 ADMIN_ID = 934386169  # <-- bu yerga o'z Telegram ID'ingizni yozing
 
