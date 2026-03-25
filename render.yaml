@@ -1,5 +1,5 @@
 services:
-  - type: worker
+  - type: web
     name: fifa07-elo-bot
     runtime: python
     plan: free
