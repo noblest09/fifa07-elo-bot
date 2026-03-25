@@ -1,7 +1,7 @@
 services:
-  - type: web
+  - type: worker
     name: fifa07-elo-bot
     runtime: python
-    pythonVersion: 3.10.5
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
