@@ -1,6 +1,5 @@
 import os
 import re
-import math
 import uuid
 import html
 import threading
@@ -29,7 +28,7 @@ from telegram.ext import (
 # =========================
 # SOZLAMALAR
 # =========================
-DIRECTOR_ID = 934386169
+DIRECTOR_ID = 934386169  # shu joyga o'zingning Telegram ID ingni yoz
 SHEET_ID = "108hVJMPQNTYfrdUV1VOFXgi_v144jev0DeZiaUm4How"
 
 RANKING_SHEET = "Ranking"
@@ -38,6 +37,7 @@ HISTORY_SHEET = "History"
 
 INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
+
 
 # =========================
 # RENDER UCHUN HEALTH SERVER
@@ -131,8 +131,10 @@ def ensure_headers():
 
     if not ranking_ws.get_all_values():
         ranking_ws.append_row(ranking_headers)
+
     if not pending_ws.get_all_values():
         pending_ws.append_row(pending_headers)
+
     if not history_ws.get_all_values():
         history_ws.append_row(history_headers)
 
@@ -147,15 +149,15 @@ def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def esc(text: str) -> str:
+    return html.escape(str(text))
+
+
 def normalize_name(name: str) -> str:
     name = re.sub(r"\s+", " ", name.strip())
     if not name:
         return name
     return " ".join(word[:1].upper() + word[1:].lower() for word in name.split())
-
-
-def esc(text: str) -> str:
-    return html.escape(str(text))
 
 
 def get_reply_menu():
@@ -168,12 +170,16 @@ def get_reply_menu():
     )
 
 
+def is_director(user_id: int) -> bool:
+    return user_id == DIRECTOR_ID
+
+
 def parse_score_message(text: str):
     """
-    Qabul qilinadigan formatlar:
+    Qabul qiladi:
     Nodir 3-2 Shaxzod
     nodir 3 : 2 shaxzod
-    Ali 10 - 9 Vali
+    ali 10 - 9 vali
     """
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
@@ -224,15 +230,15 @@ def create_player_if_missing(name: str):
     ranking_ws.append_row(
         [
             name,
-            0,   # Oyinlar
-            0,   # Galaba
-            0,   # Durang
-            0,   # Maglubiyat
-            0,   # UrganGoli
-            0,   # OtkazganGoli
-            INITIAL_RATING,  # Achko
-            0,   # Streak
-            "-", # OxirgiNatija
+            0,                # Oyinlar
+            0,                # Galaba
+            0,                # Durang
+            0,                # Maglubiyat
+            0,                # UrganGoli
+            0,                # OtkazganGoli
+            INITIAL_RATING,   # Achko
+            0,                # Streak
+            "-",              # OxirgiNatija
             now_str(),
         ]
     )
@@ -260,7 +266,6 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
     delta1 = K_FACTOR * (s1 - e1)
     delta2 = K_FACTOR * (s2 - e2)
 
-    # G'alabaga kichik bonus
     if s1 == 1.0:
         delta1 += bonus
         delta2 -= bonus
@@ -268,7 +273,6 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
         delta2 += bonus
         delta1 -= bonus
 
-    # Yumshoq minimal o'zgarish
     if s1 == 1.0 and delta1 < 4:
         delta1 = 4
         delta2 = -4
@@ -346,7 +350,11 @@ def get_sorted_ranking():
 
 def format_top_banner(rows):
     if not rows:
-        return "👑 Hali chempion yo‘q"
+        return (
+            "🏆 <b>FIFA 07 REYTING BOT</b>\n\n"
+            "👑 <b>Chempion:</b> Hali yo‘q\n"
+            "⭐ <b>Achko:</b> -"
+        )
 
     top = rows[0]
     return (
@@ -358,6 +366,23 @@ def format_top_banner(rows):
     )
 
 
+def format_top3():
+    rows = get_sorted_ranking()
+    if not rows:
+        return "Hali reyting yo‘q."
+
+    lines = ["🥇 <b>TOP 3</b>", ""]
+    medals = ["👑", "🥈", "🥉"]
+
+    for i, row in enumerate(rows[:3], start=1):
+        lines.append(
+            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {float(row['Achko']):.2f} | "
+            f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
+        )
+
+    return "\n".join(lines)
+
+
 def format_table():
     rows = get_sorted_ranking()
     if not rows:
@@ -367,7 +392,6 @@ def format_table():
     lines.append("🏆 <b>FIFA 07 REYTING JADVALI</b>")
     lines.append("")
 
-    # Chempion banner
     top = rows[0]
     lines.append("━━━━━━━━━━━━━━")
     lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
@@ -414,23 +438,6 @@ def format_table():
     return "\n".join(lines)
 
 
-def format_top3():
-    rows = get_sorted_ranking()
-    if not rows:
-        return "Hali reyting yo‘q."
-
-    lines = ["🥇 <b>TOP 3</b>", ""]
-    medals = ["👑", "🥈", "🥉"]
-
-    for i, row in enumerate(rows[:3], start=1):
-        lines.append(
-            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {float(row['Achko']):.2f} | "
-            f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
-        )
-
-    return "\n".join(lines)
-
-
 def format_menu_text():
     return (
         "📋 <b>Bot menyusi</b>\n\n"
@@ -458,10 +465,6 @@ def format_help_text():
         "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
-
-
-def is_director(user_id: int) -> bool:
-    return user_id == DIRECTOR_ID
 
 
 def add_pending_result(p1, s1, s2, p2, submitted_by_id, submitted_by_name, chat_id, chat_title):
@@ -653,49 +656,71 @@ def handle_buttons(update: Update, context: CallbackContext):
     user = query.from_user
     query.answer()
 
-    data = query.data or ""
-    if ":" not in data:
-        return
+    try:
+        data = query.data or ""
+        if ":" not in data:
+            return
 
-    action, pending_id = data.split(":", 1)
+        action, pending_id = data.split(":", 1)
 
-    if not is_director(user.id):
-        query.answer("Faqat Direktor tasdiqlay oladi.", show_alert=True)
-        return
+        if not is_director(user.id):
+            query.answer("Faqat Direktor tasdiqlay oladi.", show_alert=True)
+            return
 
-    row_idx, row = find_pending_row(pending_id)
-    if not row:
-        query.edit_message_text("❌ Bu pending natija topilmadi.")
-        return
+        row_idx, row = find_pending_row(pending_id)
+        if not row:
+            query.edit_message_text("❌ Bu pending natija topilmadi.")
+            return
 
-    status = str(row["Status"]).upper()
-    if status != "PENDING":
-        query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
-        return
+        status = str(row["Status"]).upper()
+        if status != "PENDING":
+            query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
+            return
 
-    p1 = esc(row["Player1"])
-    p2 = esc(row["Player2"])
-    s1 = row["Score1"]
-    s2 = row["Score2"]
+        p1 = esc(row["Player1"])
+        p2 = esc(row["Player2"])
+        s1 = row["Score1"]
+        s2 = row["Score2"]
 
-    if action == "approve":
-        delta1, delta2 = apply_approved_result(row, user.id)
+        if action == "approve":
+            delta1, delta2 = apply_approved_result(row, user.id)
 
-        text = (
-            f"✅ <b>Direktor tasdiqladi</b>\n\n"
-            f"{p1} {s1}-{s2} {p2}\n\n"
-            f"⭐ {p1}: {delta1:+.2f}\n"
-            f"⭐ {p2}: {delta2:+.2f}\n\n"
-            f"{format_top3()}"
-        )
-        query.edit_message_text(text, parse_mode="HTML")
-    elif action == "reject":
-        set_pending_status(pending_id, "REJECTED")
-        text = (
-            f"❌ <b>Direktor rad etdi</b>\n\n"
-            f"{p1} {s1}-{s2} {p2}"
-        )
-        query.edit_message_text(text, parse_mode="HTML")
+            text = (
+                f"✅ <b>Direktor tasdiqladi</b>\n\n"
+                f"{p1} {s1}-{s2} {p2}\n\n"
+                f"⭐ {p1}: {delta1:+.2f}\n"
+                f"⭐ {p2}: {delta2:+.2f}"
+            )
+            query.edit_message_text(text, parse_mode="HTML")
+
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=format_top3(),
+                parse_mode="HTML"
+            )
+
+        elif action == "reject":
+            set_pending_status(pending_id, "REJECTED")
+            text = (
+                f"❌ <b>Direktor rad etdi</b>\n\n"
+                f"{p1} {s1}-{s2} {p2}"
+            )
+            query.edit_message_text(text, parse_mode="HTML")
+
+    except Exception as e:
+        print("BUTTON ERROR:", e)
+        try:
+            query.answer("Xatolik chiqdi. Logni tekshiring.", show_alert=True)
+        except:
+            pass
+        try:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"❌ Tasdiqlashda xatolik:\n<code>{esc(str(e))}</code>",
+                parse_mode="HTML"
+            )
+        except:
+            pass
 
 
 def handle_menu_buttons_text(update: Update, context: CallbackContext):
