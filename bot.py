@@ -13,7 +13,7 @@ scope = [
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
-sheet = client.open_by_key("1Qdk8dtIk_AWVVIZnWo_URXWw2f7jsmxbrPJ672axmao").sheet1
+sheet = client.open_by_key("108hVJMPQNTYfrdUV1VOFXgi_v144jev0DeZiaUm4How").sheet1
 ADMIN_ID = 934386169
 
 def restart(update: Update, context: CallbackContext):
