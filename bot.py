@@ -25,10 +25,7 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-# =========================
-# SOZLAMALAR
-# =========================
-DIRECTOR_ID = 934386169  # shu joyga o'zingning Telegram ID ingni yoz
+DIRECTOR_ID = 934386169
 SHEET_ID = "108hVJMPQNTYfrdUV1VOFXgi_v144jev0DeZiaUm4How"
 
 RANKING_SHEET = "Ranking"
@@ -39,9 +36,6 @@ INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
 
-# =========================
-# RENDER UCHUN HEALTH SERVER
-# =========================
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -60,9 +54,6 @@ def run_health_server():
     server.serve_forever()
 
 
-# =========================
-# GOOGLE SHEETS ULANISH
-# =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
@@ -84,67 +75,70 @@ pending_ws = get_or_create_worksheet(PENDING_SHEET)
 history_ws = get_or_create_worksheet(HISTORY_SHEET)
 
 
-def ensure_headers():
-    ranking_headers = [
-        "Ism",
-        "Oyinlar",
-        "Galaba",
-        "Durang",
-        "Maglubiyat",
-        "UrganGoli",
-        "OtkazganGoli",
-        "Achko",
-        "Streak",
-        "OxirgiNatija",
-        "UpdatedAt",
-    ]
-    pending_headers = [
-        "ID",
-        "Player1",
-        "Score1",
-        "Score2",
-        "Player2",
-        "SubmittedByID",
-        "SubmittedByName",
-        "ChatID",
-        "ChatTitle",
-        "Status",
-        "CreatedAt",
-        "ApprovalMessageID",
-    ]
-    history_headers = [
-        "ID",
-        "Player1",
-        "Score1",
-        "Score2",
-        "Player2",
-        "SubmittedByName",
-        "ApprovedByID",
-        "ApprovedAt",
-        "Delta1",
-        "Delta2",
-        "OldRating1",
-        "NewRating1",
-        "OldRating2",
-        "NewRating2",
-    ]
+RANKING_HEADERS = [
+    "Ism",
+    "Oyinlar",
+    "Galaba",
+    "Durang",
+    "Maglubiyat",
+    "UrganGoli",
+    "OtkazganGoli",
+    "Achko",
+    "Streak",
+    "OxirgiNatija",
+    "UpdatedAt",
+]
 
-    if not ranking_ws.get_all_values():
-        ranking_ws.append_row(ranking_headers)
+PENDING_HEADERS = [
+    "ID",
+    "Player1",
+    "Score1",
+    "Score2",
+    "Player2",
+    "SubmittedByID",
+    "SubmittedByName",
+    "ChatID",
+    "ChatTitle",
+    "Status",
+    "CreatedAt",
+    "ApprovalMessageID",
+]
 
-    if not pending_ws.get_all_values():
-        pending_ws.append_row(pending_headers)
-
-    if not history_ws.get_all_values():
-        history_ws.append_row(history_headers)
+HISTORY_HEADERS = [
+    "ID",
+    "Player1",
+    "Score1",
+    "Score2",
+    "Player2",
+    "SubmittedByName",
+    "ApprovedByID",
+    "ApprovedAt",
+    "Delta1",
+    "Delta2",
+    "OldRating1",
+    "NewRating1",
+    "OldRating2",
+    "NewRating2",
+]
 
 
-ensure_headers()
+def ensure_headers(ws, headers):
+    values = ws.get_all_values()
+    if not values:
+        ws.append_row(headers)
+        return
+
+    first_row = values[0]
+    if first_row[:len(headers)] != headers:
+        ws.clear()
+        ws.append_row(headers)
 
 
-# =========================
-# YORDAMCHI FUNKSIYALAR
-# =========================
+ensure_headers(ranking_ws, RANKING_HEADERS)
+ensure_headers(pending_ws, PENDING_HEADERS)
+ensure_headers(history_ws, HISTORY_HEADERS)
+
+
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -174,13 +168,21 @@ def is_director(user_id: int) -> bool:
     return user_id == DIRECTOR_ID
 
 
+def safe_int(v, default=0):
+    try:
+        return int(float(str(v).strip()))
+    except:
+        return default
+
+
+def safe_float(v, default=0.0):
+    try:
+        return float(str(v).strip())
+    except:
+        return default
+
+
 def parse_score_message(text: str):
-    """
-    Qabul qiladi:
-    Nodir 3-2 Shaxzod
-    nodir 3 : 2 shaxzod
-    ali 10 - 9 vali
-    """
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
 
@@ -203,21 +205,36 @@ def parse_score_message(text: str):
 
 
 def ranking_records():
-    return ranking_ws.get_all_records()
+    rows = ranking_ws.get_all_records()
+    clean = []
+    for r in rows:
+        if str(r.get("Ism", "")).strip():
+            clean.append(r)
+    return clean
 
 
 def pending_records():
-    return pending_ws.get_all_records()
+    rows = pending_ws.get_all_records()
+    clean = []
+    for r in rows:
+        if str(r.get("ID", "")).strip():
+            clean.append(r)
+    return clean
 
 
 def history_records():
-    return history_ws.get_all_records()
+    rows = history_ws.get_all_records()
+    clean = []
+    for r in rows:
+        if str(r.get("ID", "")).strip():
+            clean.append(r)
+    return clean
 
 
 def find_ranking_row(name: str):
     records = ranking_records()
     for idx, row in enumerate(records, start=2):
-        if str(row["Ism"]).strip().lower() == name.strip().lower():
+        if str(row.get("Ism", "")).strip().lower() == name.strip().lower():
             return idx, row
     return None, None
 
@@ -229,17 +246,7 @@ def create_player_if_missing(name: str):
 
     ranking_ws.append_row(
         [
-            name,
-            0,                # Oyinlar
-            0,                # Galaba
-            0,                # Durang
-            0,                # Maglubiyat
-            0,                # UrganGoli
-            0,                # OtkazganGoli
-            INITIAL_RATING,   # Achko
-            0,                # Streak
-            "-",              # OxirgiNatija
-            now_str(),
+            name, 0, 0, 0, 0, 0, 0, INITIAL_RATING, 0, "-", now_str()
         ]
     )
     return find_ranking_row(name)
@@ -274,18 +281,14 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
         delta1 -= bonus
 
     if s1 == 1.0 and delta1 < 4:
-        delta1 = 4
-        delta2 = -4
+        delta1, delta2 = 4, -4
     elif s2 == 1.0 and delta2 < 4:
-        delta2 = 4
-        delta1 = -4
+        delta2, delta1 = 4, -4
     elif s1 == 0.5:
         if r1 < r2 and delta1 < 2:
-            delta1 = 2
-            delta2 = -2
+            delta1, delta2 = 2, -2
         elif r2 < r1 and delta2 < 2:
-            delta2 = 2
-            delta1 = -2
+            delta2, delta1 = 2, -2
 
     return round(delta1, 2), round(delta2, 2)
 
@@ -293,14 +296,14 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
 def update_player_stats(name: str, goals_for: int, goals_against: int, result: str, delta_rating: float):
     row_idx, row = create_player_if_missing(name)
 
-    games = int(row["Oyinlar"]) + 1
-    wins = int(row["Galaba"])
-    draws = int(row["Durang"])
-    losses = int(row["Maglubiyat"])
-    gf = int(row["UrganGoli"]) + goals_for
-    ga = int(row["OtkazganGoli"]) + goals_against
-    rating = float(row["Achko"]) + float(delta_rating)
-    streak = int(row["Streak"])
+    games = safe_int(row.get("Oyinlar")) + 1
+    wins = safe_int(row.get("Galaba"))
+    draws = safe_int(row.get("Durang"))
+    losses = safe_int(row.get("Maglubiyat"))
+    gf = safe_int(row.get("UrganGoli")) + goals_for
+    ga = safe_int(row.get("OtkazganGoli")) + goals_against
+    rating = safe_float(row.get("Achko"), INITIAL_RATING) + float(delta_rating)
+    streak = safe_int(row.get("Streak"))
 
     if result == "W":
         wins += 1
@@ -318,17 +321,8 @@ def update_player_stats(name: str, goals_for: int, goals_against: int, result: s
     ranking_ws.update(
         f"A{row_idx}:K{row_idx}",
         [[
-            name,
-            games,
-            wins,
-            draws,
-            losses,
-            gf,
-            ga,
-            round(rating, 2),
-            streak,
-            last_result,
-            now_str(),
+            name, games, wins, draws, losses, gf, ga,
+            round(rating, 2), streak, last_result, now_str()
         ]]
     )
 
@@ -338,12 +332,12 @@ def get_sorted_ranking():
     rows = sorted(
         rows,
         key=lambda x: (
-            float(x["Achko"]),
-            int(x["Galaba"]),
-            int(x["UrganGoli"]) - int(x["OtkazganGoli"]),
-            int(x["UrganGoli"]),
+            safe_float(x.get("Achko")),
+            safe_int(x.get("Galaba")),
+            safe_int(x.get("UrganGoli")) - safe_int(x.get("OtkazganGoli")),
+            safe_int(x.get("UrganGoli")),
         ),
-        reverse=True
+        reverse=True,
     )
     return rows
 
@@ -360,7 +354,7 @@ def format_top_banner(rows):
     return (
         "🏆 <b>FIFA 07 REYTING BOT</b>\n\n"
         f"👑 <b>Chempion:</b> {esc(top['Ism'])}\n"
-        f"⭐ <b>Achko:</b> {float(top['Achko']):.2f}\n"
+        f"⭐ <b>Achko:</b> {safe_float(top['Achko']):.2f}\n"
         f"🎮 <b>O‘yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
         f"⚽ <b>Gollar:</b> {top['UrganGoli']}-{top['OtkazganGoli']}"
     )
@@ -371,15 +365,13 @@ def format_top3():
     if not rows:
         return "Hali reyting yo‘q."
 
-    lines = ["🥇 <b>TOP 3</b>", ""]
     medals = ["👑", "🥈", "🥉"]
-
+    lines = ["🥇 <b>TOP 3</b>", ""]
     for i, row in enumerate(rows[:3], start=1):
         lines.append(
-            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {float(row['Achko']):.2f} | "
+            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
             f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
         )
-
     return "\n".join(lines)
 
 
@@ -388,42 +380,27 @@ def format_table():
     if not rows:
         return "Hali reytingda o‘yinchi yo‘q."
 
-    lines = []
-    lines.append("🏆 <b>FIFA 07 REYTING JADVALI</b>")
-    lines.append("")
-
+    lines = ["🏆 <b>FIFA 07 REYTING JADVALI</b>", ""]
     top = rows[0]
     lines.append("━━━━━━━━━━━━━━")
     lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
-    lines.append(
-        f"🎮 O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}"
-    )
-    lines.append(
-        f"⚽ Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {float(top['Achko']):.2f}"
-    )
+    lines.append(f"🎮 O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}")
+    lines.append(f"⚽ Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}")
     lines.append("━━━━━━━━━━━━━━")
     lines.append("")
 
     if len(rows) >= 2:
         second = rows[1]
         lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
-        lines.append(
-            f"🎮 O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}"
-        )
-        lines.append(
-            f"⚽ Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {float(second['Achko']):.2f}"
-        )
+        lines.append(f"🎮 O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}")
+        lines.append(f"⚽ Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}")
         lines.append("")
 
     if len(rows) >= 3:
         third = rows[2]
         lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
-        lines.append(
-            f"🎮 O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}"
-        )
-        lines.append(
-            f"⚽ Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {float(third['Achko']):.2f}"
-        )
+        lines.append(f"🎮 O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}")
+        lines.append(f"⚽ Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}")
         lines.append("")
 
     if len(rows) > 3:
@@ -431,8 +408,8 @@ def format_table():
         for i, row in enumerate(rows[3:], start=4):
             lines.append(
                 f"{i}. <b>{esc(row['Ism'])}</b> — 🎮{row['Oyinlar']} | ✅{row['Galaba']} | "
-                f"🤝{row['Durang']} | ❌{row['Maglubiyat']} | "
-                f"⚽{row['UrganGoli']}-{row['OtkazganGoli']} | ⭐{float(row['Achko']):.2f}"
+                f"🤝{row['Durang']} | ❌{row['Maglubiyat']} | ⚽{row['UrganGoli']}-{row['OtkazganGoli']} | "
+                f"⭐{safe_float(row['Achko']):.2f}"
             )
 
     return "\n".join(lines)
@@ -459,9 +436,7 @@ def format_help_text():
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
         "3) Tasdiqlash faqat <b>Direktor</b> tomonidan bo‘ladi.\n"
-        "4) Achko ELOga o‘xshash hisoblanadi:\n"
-        "   - kuchli kuchsizni yutsa kamroq oladi\n"
-        "   - kuchsiz kuchlini yutsa ko‘proq oladi\n"
+        "4) Achko ELOga o‘xshash hisoblanadi.\n"
         "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
@@ -470,18 +445,9 @@ def format_help_text():
 def add_pending_result(p1, s1, s2, p2, submitted_by_id, submitted_by_name, chat_id, chat_title):
     pending_id = str(uuid.uuid4())[:8]
     pending_ws.append_row([
-        pending_id,
-        p1,
-        s1,
-        s2,
-        p2,
-        submitted_by_id,
-        submitted_by_name,
-        chat_id,
-        chat_title,
-        "PENDING",
-        now_str(),
-        "",
+        pending_id, p1, s1, s2, p2,
+        submitted_by_id, submitted_by_name, chat_id, chat_title,
+        "PENDING", now_str(), ""
     ])
     return pending_id
 
@@ -489,7 +455,7 @@ def add_pending_result(p1, s1, s2, p2, submitted_by_id, submitted_by_name, chat_
 def find_pending_row(pending_id: str):
     rows = pending_records()
     for idx, row in enumerate(rows, start=2):
-        if str(row["ID"]).strip() == pending_id:
+        if str(row.get("ID", "")).strip() == pending_id:
             return idx, row
     return None, None
 
@@ -506,18 +472,9 @@ def set_pending_status(pending_id: str, status: str, message_id=None):
     pending_ws.update(
         f"A{row_idx}:L{row_idx}",
         [[
-            row["ID"],
-            row["Player1"],
-            row["Score1"],
-            row["Score2"],
-            row["Player2"],
-            row["SubmittedByID"],
-            row["SubmittedByName"],
-            row["ChatID"],
-            row["ChatTitle"],
-            status,
-            row["CreatedAt"],
-            approval_message_id,
+            row["ID"], row["Player1"], row["Score1"], row["Score2"], row["Player2"],
+            row["SubmittedByID"], row["SubmittedByName"], row["ChatID"], row["ChatTitle"],
+            status, row["CreatedAt"], approval_message_id
         ]]
     )
     return True
@@ -526,14 +483,14 @@ def set_pending_status(pending_id: str, status: str, message_id=None):
 def apply_approved_result(pending_row, approver_id):
     p1 = normalize_name(str(pending_row["Player1"]))
     p2 = normalize_name(str(pending_row["Player2"]))
-    s1 = int(pending_row["Score1"])
-    s2 = int(pending_row["Score2"])
+    s1 = safe_int(pending_row["Score1"])
+    s2 = safe_int(pending_row["Score2"])
 
     _, row1 = create_player_if_missing(p1)
     _, row2 = create_player_if_missing(p2)
 
-    old1 = float(row1["Achko"])
-    old2 = float(row2["Achko"])
+    old1 = safe_float(row1.get("Achko"), INITIAL_RATING)
+    old2 = safe_float(row2.get("Achko"), INITIAL_RATING)
 
     delta1, delta2 = calc_elo_change(old1, old2, s1, s2)
 
@@ -548,29 +505,15 @@ def apply_approved_result(pending_row, approver_id):
     update_player_stats(p2, s2, s1, res2, delta2)
 
     history_ws.append_row([
-        pending_row["ID"],
-        p1,
-        s1,
-        s2,
-        p2,
-        pending_row["SubmittedByName"],
-        approver_id,
-        now_str(),
-        delta1,
-        delta2,
-        old1,
-        round(old1 + delta1, 2),
-        old2,
-        round(old2 + delta2, 2),
+        pending_row["ID"], p1, s1, s2, p2,
+        pending_row["SubmittedByName"], approver_id, now_str(),
+        delta1, delta2, old1, round(old1 + delta1, 2), old2, round(old2 + delta2, 2)
     ])
 
     set_pending_status(pending_row["ID"], "APPROVED")
     return delta1, delta2
 
 
-# =========================
-# BOT HANDLERLAR
-# =========================
 def set_bot_commands(bot):
     commands = [
         BotCommand("start", "Boshlash"),
@@ -590,53 +533,31 @@ def start(update: Update, context: CallbackContext):
         "Natija yuborish formati:\n"
         "<code>Nodir 3-2 Shaxzod</code>"
     )
-
-    update.message.reply_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=get_reply_menu(),
-    )
+    update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def menu_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        format_menu_text(),
-        parse_mode="HTML",
-        reply_markup=get_reply_menu(),
-    )
+    update.message.reply_text(format_menu_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def help_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        format_help_text(),
-        parse_mode="HTML",
-        reply_markup=get_reply_menu(),
-    )
+    update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def table_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        format_table(),
-        parse_mode="HTML",
-        reply_markup=get_reply_menu(),
-    )
+    update.message.reply_text(format_table(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def top3_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        format_top3(),
-        parse_mode="HTML",
-        reply_markup=get_reply_menu(),
-    )
+    update.message.reply_text(format_top3(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def pending_cmd(update: Update, context: CallbackContext):
-    user = update.effective_user
-    if not is_director(user.id):
+    if not is_director(update.effective_user.id):
         update.message.reply_text("⛔ Bu bo‘lim faqat Direktor uchun.")
         return
 
-    rows = [r for r in pending_records() if str(r["Status"]).upper() == "PENDING"]
+    rows = [r for r in pending_records() if str(r.get("Status", "")).upper() == "PENDING"]
     if not rows:
         update.message.reply_text("✅ Kutilayotgan natija yo‘q.")
         return
@@ -647,7 +568,6 @@ def pending_cmd(update: Update, context: CallbackContext):
             f"• <b>{esc(r['ID'])}</b> — {esc(r['Player1'])} {r['Score1']}-{r['Score2']} {esc(r['Player2'])} "
             f"({esc(r['SubmittedByName'])})"
         )
-
     update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
@@ -667,12 +587,12 @@ def handle_buttons(update: Update, context: CallbackContext):
             query.answer("Faqat Direktor tasdiqlay oladi.", show_alert=True)
             return
 
-        row_idx, row = find_pending_row(pending_id)
+        _, row = find_pending_row(pending_id)
         if not row:
             query.edit_message_text("❌ Bu pending natija topilmadi.")
             return
 
-        status = str(row["Status"]).upper()
+        status = str(row.get("Status", "")).upper()
         if status != "PENDING":
             query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
             return
@@ -684,15 +604,13 @@ def handle_buttons(update: Update, context: CallbackContext):
 
         if action == "approve":
             delta1, delta2 = apply_approved_result(row, user.id)
-
-            text = (
+            query.edit_message_text(
                 f"✅ <b>Direktor tasdiqladi</b>\n\n"
                 f"{p1} {s1}-{s2} {p2}\n\n"
                 f"⭐ {p1}: {delta1:+.2f}\n"
-                f"⭐ {p2}: {delta2:+.2f}"
+                f"⭐ {p2}: {delta2:+.2f}",
+                parse_mode="HTML",
             )
-            query.edit_message_text(text, parse_mode="HTML")
-
             context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=format_top3(),
@@ -701,26 +619,18 @@ def handle_buttons(update: Update, context: CallbackContext):
 
         elif action == "reject":
             set_pending_status(pending_id, "REJECTED")
-            text = (
-                f"❌ <b>Direktor rad etdi</b>\n\n"
-                f"{p1} {s1}-{s2} {p2}"
+            query.edit_message_text(
+                f"❌ <b>Direktor rad etdi</b>\n\n{p1} {s1}-{s2} {p2}",
+                parse_mode="HTML",
             )
-            query.edit_message_text(text, parse_mode="HTML")
 
     except Exception as e:
         print("BUTTON ERROR:", e)
-        try:
-            query.answer("Xatolik chiqdi. Logni tekshiring.", show_alert=True)
-        except:
-            pass
-        try:
-            context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=f"❌ Tasdiqlashda xatolik:\n<code>{esc(str(e))}</code>",
-                parse_mode="HTML"
-            )
-        except:
-            pass
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"❌ Tasdiqlashda xatolik:\n<code>{esc(str(e))}</code>",
+            parse_mode="HTML",
+        )
 
 
 def handle_menu_buttons_text(update: Update, context: CallbackContext):
@@ -740,19 +650,15 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         return
 
     p1, s1, s2, p2 = parsed
-
     submitted_by = update.effective_user
     chat = update.effective_chat
 
     pending_id = add_pending_result(
-        p1=p1,
-        s1=s1,
-        s2=s2,
-        p2=p2,
-        submitted_by_id=submitted_by.id,
-        submitted_by_name=submitted_by.full_name,
-        chat_id=chat.id,
-        chat_title=getattr(chat, "title", "") or "Private",
+        p1, s1, s2, p2,
+        submitted_by.id,
+        submitted_by.full_name,
+        chat.id,
+        getattr(chat, "title", "") or "Private",
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -774,9 +680,6 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
     set_pending_status(pending_id, "PENDING", message_id=msg.message_id)
 
 
-# =========================
-# MAIN
-# =========================
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
 
