@@ -25,6 +25,9 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
+# =========================
+# SOZLAMALAR
+# =========================
 DIRECTOR_ID = 934386169
 SHEET_ID = "108hVJMPQNTYfrdUV1VOFXgi_v144jev0DeZiaUm4How"
 
@@ -36,6 +39,9 @@ INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
 
+# =========================
+# RENDER UCHUN HEALTH SERVER
+# =========================
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -54,6 +60,9 @@ def run_health_server():
     server.serve_forever()
 
 
+# =========================
+# GOOGLE SHEETS
+# =========================
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
@@ -107,6 +116,9 @@ ensure_headers(pending_ws, PENDING_HEADERS)
 ensure_headers(history_ws, HISTORY_HEADERS)
 
 
+# =========================
+# YORDAMCHI FUNKSIYALAR
+# =========================
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -124,14 +136,17 @@ def normalize_name(name: str) -> str:
 
 def safe_int(v, default=0):
     try:
-        return int(float(str(v).strip()))
+        return int(float(str(v).strip().replace(",", ".")))
     except:
         return default
 
 
 def safe_float(v, default=0.0):
     try:
-        return float(str(v).strip())
+        s = str(v).strip().replace(",", ".")
+        if s == "":
+            return default
+        return float(s)
     except:
         return default
 
@@ -290,17 +305,37 @@ def update_player_stats(name: str, goals_for: int, goals_against: int, result: s
 
 def get_sorted_ranking():
     rows = [row for _, row in ranking_records()]
-    rows = sorted(
-        rows,
+
+    cleaned = []
+    for row in rows:
+        name = str(row.get("Ism", "")).strip()
+        if not name:
+            continue
+
+        cleaned.append({
+            "Ism": name,
+            "Oyinlar": safe_int(row.get("Oyinlar")),
+            "Galaba": safe_int(row.get("Galaba")),
+            "Durang": safe_int(row.get("Durang")),
+            "Maglubiyat": safe_int(row.get("Maglubiyat")),
+            "UrganGoli": safe_int(row.get("UrganGoli")),
+            "OtkazganGoli": safe_int(row.get("OtkazganGoli")),
+            "Achko": safe_float(row.get("Achko"), INITIAL_RATING),
+            "Streak": safe_int(row.get("Streak")),
+            "OxirgiNatija": str(row.get("OxirgiNatija", "")).strip(),
+            "UpdatedAt": str(row.get("UpdatedAt", "")).strip(),
+        })
+
+    cleaned.sort(
         key=lambda x: (
-            safe_float(x["Achko"]),
-            safe_int(x["Galaba"]),
-            safe_int(x["UrganGoli"]) - safe_int(x["OtkazganGoli"]),
-            safe_int(x["UrganGoli"]),
+            x["Achko"],
+            x["Galaba"],
+            x["UrganGoli"] - x["OtkazganGoli"],
+            x["UrganGoli"],
         ),
-        reverse=True,
+        reverse=True
     )
-    return rows
+    return cleaned
 
 
 def format_top_banner(rows):
@@ -324,68 +359,72 @@ def format_top_banner(rows):
 def format_top3():
     rows = get_sorted_ranking()
     if not rows:
-        return "Hali reyting yo‘q."
+        return "🏅 TOP 3\n\nHali reyting yo‘q."
+
+    lines = ["🏅 <b>TOP 3</b>", ""]
 
     medals = ["👑", "🥈", "🥉"]
-    lines = ["🥇 <b>TOP 3</b>", ""]
+    faces = ["😎", "🎮", "⚽"]
 
     for i, row in enumerate(rows[:3], start=1):
         medal = medals[i - 1]
+        face = faces[i - 1] if i - 1 < len(faces) else "🎯"
         lines.append(
             f"{medal} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
-            f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
+            f"{face} {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
         )
+
     return "\n".join(lines)
 
 
 def format_table():
     rows = get_sorted_ranking()
     if not rows:
-        return "Hali reytingda o‘yinchi yo‘q."
+        return "🏆 <b>FIFA 07 REYTING JADVALI</b>\n\nHali reytingda o‘yinchi yo‘q."
 
     lines = ["🏆 <b>FIFA 07 REYTING JADVALI</b>", ""]
 
     top = rows[0]
-    lines.append("━━━━━━━━━━━━━━")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
     lines.append(
-        f"🎮 O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}"
+        f"⚽ O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}"
     )
     lines.append(
-        f"⚽ Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}"
+        f"🥅 Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}"
     )
-    lines.append("━━━━━━━━━━━━━━")
-    lines.append("")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
 
     if len(rows) >= 2:
         second = rows[1]
+        lines.append("")
         lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
         lines.append(
-            f"🎮 O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}"
+            f"⚽ O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}"
         )
         lines.append(
-            f"⚽ Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}"
+            f"🥅 Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}"
         )
-        lines.append("")
 
     if len(rows) >= 3:
         third = rows[2]
+        lines.append("")
         lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
         lines.append(
-            f"🎮 O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}"
+            f"⚽ O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}"
         )
         lines.append(
-            f"⚽ Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}"
+            f"🥅 Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}"
         )
-        lines.append("")
 
     if len(rows) > 3:
+        lines.append("")
         lines.append("📋 <b>Qolganlar:</b>")
         for i, row in enumerate(rows[3:], start=4):
             lines.append(
-                f"{i}. <b>{esc(row['Ism'])}</b> — 🎮{row['Oyinlar']} | ✅{row['Galaba']} | "
-                f"🤝{row['Durang']} | ❌{row['Maglubiyat']} | ⚽{row['UrganGoli']}-{row['OtkazganGoli']} | "
-                f"⭐{safe_float(row['Achko']):.2f}"
+                f"{i}. <b>{esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
+                f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | 🤝 {row['Durang']} | ❌ {row['Maglubiyat']} | "
+                f"⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
             )
 
     return "\n".join(lines)
@@ -401,7 +440,9 @@ def format_menu_text():
         "/menu - Menyu\n"
         "/table - To‘liq jadval\n"
         "/top3 - Top 3\n"
-        "/pending - Direktor uchun kutilayotgan natijalar\n"
+        "/pending - Kutilayotgan natijalar\n"
+        "/reset - Reytingni tozalash (Direktor)\n"
+        "/restart - Botni qayta ishga tushirish (Direktor)\n"
         "/help - Qoidalar"
     )
 
@@ -412,7 +453,9 @@ def format_help_text():
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
         "3) Tasdiqlash faqat <b>Direktor</b> tomonidan bo‘ladi.\n"
-        "4) Achko ELOga o‘xshash hisoblanadi.\n"
+        "4) Achko ELOga o‘xshash hisoblanadi:\n"
+        "   - kuchli kuchsizni yutsa kamroq oladi\n"
+        "   - kuchsiz kuchlini yutsa ko‘proq oladi\n"
         "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
@@ -489,6 +532,9 @@ def apply_approved_result(pending_row, approver_id):
     return delta1, delta2
 
 
+# =========================
+# KOMANDALAR
+# =========================
 def set_bot_commands(bot):
     commands = [
         BotCommand("start", "Boshlash"),
@@ -496,6 +542,8 @@ def set_bot_commands(bot):
         BotCommand("table", "Reyting jadvali"),
         BotCommand("top3", "Top 3"),
         BotCommand("pending", "Kutilayotgan natijalar"),
+        BotCommand("reset", "Reytingni tozalash"),
+        BotCommand("restart", "Botni qayta ishga tushirish"),
         BotCommand("help", "Qoidalar"),
     ]
     bot.set_my_commands(commands)
@@ -544,6 +592,31 @@ def pending_cmd(update: Update, context: CallbackContext):
             f"({esc(r['SubmittedByName'])})"
         )
     update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+def reset_cmd(update: Update, context: CallbackContext):
+    if not is_director(update.effective_user.id):
+        update.message.reply_text("⛔ /reset faqat Direktor uchun.")
+        return
+
+    ranking_ws.clear()
+    pending_ws.clear()
+    history_ws.clear()
+
+    ensure_headers(ranking_ws, RANKING_HEADERS)
+    ensure_headers(pending_ws, PENDING_HEADERS)
+    ensure_headers(history_ws, HISTORY_HEADERS)
+
+    update.message.reply_text("✅ Reyting, pending va history tozalandi.")
+
+
+def restart_cmd(update: Update, context: CallbackContext):
+    if not is_director(update.effective_user.id):
+        update.message.reply_text("⛔ /restart faqat Direktor uchun.")
+        return
+
+    update.message.reply_text("🔄 Bot qayta ishga tushirilmoqda...")
+    os.execl(os.sys.executable, os.sys.executable, *os.sys.argv)
 
 
 def handle_buttons(update: Update, context: CallbackContext):
@@ -643,7 +716,7 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         ]
     ])
 
-    msg = update.message.reply_text(
+    update.message.reply_text(
         "⏳ <b>Natija qabul qilindi</b>\n\n"
         f"🆔 <b>{esc(pending_id)}</b>\n"
         f"{esc(p1)} {s1}-{s2} {esc(p2)}\n\n"
@@ -652,9 +725,10 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         reply_markup=keyboard,
     )
 
-    set_pending_status(pending_id, "PENDING", message_id=msg.message_id)
 
-
+# =========================
+# MAIN
+# =========================
 def main():
     threading.Thread(target=run_health_server, daemon=True).start()
 
@@ -670,6 +744,8 @@ def main():
     dp.add_handler(CommandHandler("table", table_cmd))
     dp.add_handler(CommandHandler("top3", top3_cmd))
     dp.add_handler(CommandHandler("pending", pending_cmd))
+    dp.add_handler(CommandHandler("reset", reset_cmd))
+    dp.add_handler(CommandHandler("restart", restart_cmd))
 
     dp.add_handler(CallbackQueryHandler(handle_buttons))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_menu_buttons_text))
