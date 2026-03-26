@@ -2,10 +2,10 @@ import os
 import re
 import uuid
 import html
-import threading
-from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from datetime import datetime
+
+from flask import Flask, request
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -38,27 +38,16 @@ HISTORY_SHEET = "History"
 INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
+TOKEN = os.environ["TELEGRAM_TOKEN"]
+BASE_URL = os.environ["BASE_URL"].rstrip("/")  # masalan: https://fifa07-elo-bot.onrender.com
+PORT = int(os.environ.get("PORT", 10000))
 
 # =========================
-# RENDER UCHUN HEALTH SERVER
+# TELEGRAM UPDATER / DISPATCHER
 # =========================
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"FIFA 07 bot is running")
-
-    def log_message(self, format, *args):
-        return
-
-
-def run_health_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    print(f"Health server running on port {port}")
-    server.serve_forever()
-
+updater = Updater(TOKEN, use_context=True)
+bot = updater.bot
+dispatcher = updater.dispatcher
 
 # =========================
 # GOOGLE SHEETS
@@ -82,7 +71,6 @@ def get_or_create_worksheet(title: str, rows: int = 2000, cols: int = 20):
 ranking_ws = get_or_create_worksheet(RANKING_SHEET)
 pending_ws = get_or_create_worksheet(PENDING_SHEET)
 history_ws = get_or_create_worksheet(HISTORY_SHEET)
-
 
 RANKING_HEADERS = [
     "Ism", "Oyinlar", "Galaba", "Durang", "Maglubiyat",
@@ -115,7 +103,6 @@ ensure_headers(ranking_ws, RANKING_HEADERS)
 ensure_headers(pending_ws, PENDING_HEADERS)
 ensure_headers(history_ws, HISTORY_HEADERS)
 
-
 # =========================
 # YORDAMCHI FUNKSIYALAR
 # =========================
@@ -137,7 +124,7 @@ def normalize_name(name: str) -> str:
 def safe_int(v, default=0):
     try:
         return int(float(str(v).strip().replace(",", ".")))
-    except:
+    except Exception:
         return default
 
 
@@ -147,7 +134,7 @@ def safe_float(v, default=0.0):
         if s == "":
             return default
         return float(s)
-    except:
+    except Exception:
         return default
 
 
@@ -204,10 +191,6 @@ def ranking_records():
 
 def pending_records():
     return sheet_rows(pending_ws, PENDING_HEADERS)
-
-
-def history_records():
-    return sheet_rows(history_ws, HISTORY_HEADERS)
 
 
 def find_ranking_row(name: str):
@@ -362,16 +345,13 @@ def format_top3():
         return "🏅 TOP 3\n\nHali reyting yo‘q."
 
     lines = ["🏅 <b>TOP 3</b>", ""]
-
     medals = ["👑", "🥈", "🥉"]
     faces = ["😎", "🎮", "⚽"]
 
     for i, row in enumerate(rows[:3], start=1):
-        medal = medals[i - 1]
-        face = faces[i - 1] if i - 1 < len(faces) else "🎯"
         lines.append(
-            f"{medal} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
-            f"{face} {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
+            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
+            f"{faces[i-1]} {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
         )
 
     return "\n".join(lines)
@@ -387,35 +367,23 @@ def format_table():
     top = rows[0]
     lines.append("━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
-    lines.append(
-        f"⚽ O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}"
-    )
-    lines.append(
-        f"🥅 Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}"
-    )
+    lines.append(f"⚽ O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}")
+    lines.append(f"🥅 Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}")
     lines.append("━━━━━━━━━━━━━━━━━━━━")
 
     if len(rows) >= 2:
         second = rows[1]
         lines.append("")
         lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
-        lines.append(
-            f"⚽ O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}"
-        )
-        lines.append(
-            f"🥅 Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}"
-        )
+        lines.append(f"⚽ O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}")
+        lines.append(f"🥅 Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}")
 
     if len(rows) >= 3:
         third = rows[2]
         lines.append("")
         lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
-        lines.append(
-            f"⚽ O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}"
-        )
-        lines.append(
-            f"🥅 Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}"
-        )
+        lines.append(f"⚽ O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}")
+        lines.append(f"🥅 Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}")
 
     if len(rows) > 3:
         lines.append("")
@@ -426,7 +394,6 @@ def format_table():
                 f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | 🤝 {row['Durang']} | ❌ {row['Maglubiyat']} | "
                 f"⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
             )
-
     return "\n".join(lines)
 
 
@@ -453,9 +420,7 @@ def format_help_text():
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
         "3) Tasdiqlash faqat <b>Direktor</b> tomonidan bo‘ladi.\n"
-        "4) Achko ELOga o‘xshash hisoblanadi:\n"
-        "   - kuchli kuchsizni yutsa kamroq oladi\n"
-        "   - kuchsiz kuchlini yutsa ko‘proq oladi\n"
+        "4) Achko ELOga o‘xshash hisoblanadi.\n"
         "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
@@ -531,11 +496,10 @@ def apply_approved_result(pending_row, approver_id):
     set_pending_status(pending_row["ID"], "APPROVED")
     return delta1, delta2
 
-
 # =========================
 # KOMANDALAR
 # =========================
-def set_bot_commands(bot):
+def set_bot_commands(bot_obj):
     commands = [
         BotCommand("start", "Boshlash"),
         BotCommand("menu", "Menyu"),
@@ -546,7 +510,7 @@ def set_bot_commands(bot):
         BotCommand("restart", "Botni qayta ishga tushirish"),
         BotCommand("help", "Qoidalar"),
     ]
-    bot.set_my_commands(commands)
+    bot_obj.set_my_commands(commands)
 
 
 def start(update: Update, context: CallbackContext):
@@ -725,35 +689,44 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         reply_markup=keyboard,
     )
 
+# =========================
+# HANDLERLAR RO'YXATI
+# =========================
+dispatcher.add_handler(CommandHandler("start", start))
+dispatcher.add_handler(CommandHandler("menu", menu_cmd))
+dispatcher.add_handler(CommandHandler("help", help_cmd))
+dispatcher.add_handler(CommandHandler("table", table_cmd))
+dispatcher.add_handler(CommandHandler("top3", top3_cmd))
+dispatcher.add_handler(CommandHandler("pending", pending_cmd))
+dispatcher.add_handler(CommandHandler("reset", reset_cmd))
+dispatcher.add_handler(CommandHandler("restart", restart_cmd))
+dispatcher.add_handler(CallbackQueryHandler(handle_buttons))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_menu_buttons_text))
 
 # =========================
-# MAIN
+# WEBHOOK / FLASK
 # =========================
-def main():
-    threading.Thread(target=run_health_server, daemon=True).start()
+app = Flask(__name__)
 
-    token = os.environ["TELEGRAM_TOKEN"]
-    updater = Updater(token, use_context=True)
-    dp = updater.dispatcher
+@app.route("/", methods=["GET"])
+def health():
+    return "FIFA 07 bot webhook is running", 200
 
-    set_bot_commands(updater.bot)
+@app.route(f"/{TOKEN}", methods=["POST"])
+def telegram_webhook():
+    update = Update.de_json(request.get_json(force=True), bot)
+    dispatcher.process_update(update)
+    return "ok", 200
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("menu", menu_cmd))
-    dp.add_handler(CommandHandler("help", help_cmd))
-    dp.add_handler(CommandHandler("table", table_cmd))
-    dp.add_handler(CommandHandler("top3", top3_cmd))
-    dp.add_handler(CommandHandler("pending", pending_cmd))
-    dp.add_handler(CommandHandler("reset", reset_cmd))
-    dp.add_handler(CommandHandler("restart", restart_cmd))
 
-    dp.add_handler(CallbackQueryHandler(handle_buttons))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_menu_buttons_text))
-
-    print("Bot ishga tushdi...")
-    updater.start_polling()
-    updater.idle()
+def setup_webhook():
+    webhook_url = f"{BASE_URL}/{TOKEN}"
+    bot.delete_webhook(drop_pending_updates=True)
+    bot.set_webhook(url=webhook_url)
+    set_bot_commands(bot)
+    print(f"Webhook set: {webhook_url}")
 
 
 if __name__ == "__main__":
-    main()
+    setup_webhook()
+    app.run(host="0.0.0.0", port=PORT)
