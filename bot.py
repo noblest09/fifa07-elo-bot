@@ -76,60 +76,28 @@ history_ws = get_or_create_worksheet(HISTORY_SHEET)
 
 
 RANKING_HEADERS = [
-    "Ism",
-    "Oyinlar",
-    "Galaba",
-    "Durang",
-    "Maglubiyat",
-    "UrganGoli",
-    "OtkazganGoli",
-    "Achko",
-    "Streak",
-    "OxirgiNatija",
-    "UpdatedAt",
+    "Ism", "Oyinlar", "Galaba", "Durang", "Maglubiyat",
+    "UrganGoli", "OtkazganGoli", "Achko", "Streak",
+    "OxirgiNatija", "UpdatedAt"
 ]
 
 PENDING_HEADERS = [
-    "ID",
-    "Player1",
-    "Score1",
-    "Score2",
-    "Player2",
-    "SubmittedByID",
-    "SubmittedByName",
-    "ChatID",
-    "ChatTitle",
-    "Status",
-    "CreatedAt",
-    "ApprovalMessageID",
+    "ID", "Player1", "Score1", "Score2", "Player2",
+    "SubmittedByID", "SubmittedByName", "ChatID", "ChatTitle",
+    "Status", "CreatedAt", "ApprovalMessageID"
 ]
 
 HISTORY_HEADERS = [
-    "ID",
-    "Player1",
-    "Score1",
-    "Score2",
-    "Player2",
-    "SubmittedByName",
-    "ApprovedByID",
-    "ApprovedAt",
-    "Delta1",
-    "Delta2",
-    "OldRating1",
-    "NewRating1",
-    "OldRating2",
-    "NewRating2",
+    "ID", "Player1", "Score1", "Score2", "Player2",
+    "SubmittedByName", "ApprovedByID", "ApprovedAt",
+    "Delta1", "Delta2", "OldRating1", "NewRating1",
+    "OldRating2", "NewRating2"
 ]
 
 
 def ensure_headers(ws, headers):
-    values = ws.get_all_values()
-    if not values:
-        ws.append_row(headers)
-        return
-
-    first_row = values[0]
-    if first_row[:len(headers)] != headers:
+    row1 = ws.row_values(1)
+    if row1 != headers:
         ws.clear()
         ws.append_row(headers)
 
@@ -154,20 +122,6 @@ def normalize_name(name: str) -> str:
     return " ".join(word[:1].upper() + word[1:].lower() for word in name.split())
 
 
-def get_reply_menu():
-    return ReplyKeyboardMarkup(
-        [
-            ["📊 Jadval", "🥇 Top 3"],
-            ["📋 Menyu", "ℹ️ Qoida"],
-        ],
-        resize_keyboard=True,
-    )
-
-
-def is_director(user_id: int) -> bool:
-    return user_id == DIRECTOR_ID
-
-
 def safe_int(v, default=0):
     try:
         return int(float(str(v).strip()))
@@ -180,6 +134,20 @@ def safe_float(v, default=0.0):
         return float(str(v).strip())
     except:
         return default
+
+
+def get_reply_menu():
+    return ReplyKeyboardMarkup(
+        [
+            ["📊 Jadval", "🥇 Top 3"],
+            ["📋 Menyu", "ℹ️ Qoida"],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def is_director(user_id: int) -> bool:
+    return user_id == DIRECTOR_ID
 
 
 def parse_score_message(text: str):
@@ -204,37 +172,32 @@ def parse_score_message(text: str):
     return p1, s1, s2, p2
 
 
+def sheet_rows(ws, headers):
+    values = ws.get_all_values()
+    result = []
+    for idx, row in enumerate(values[1:], start=2):
+        row = row + [""] * (len(headers) - len(row))
+        item = dict(zip(headers, row[:len(headers)]))
+        if any(str(v).strip() for v in item.values()):
+            result.append((idx, item))
+    return result
+
+
 def ranking_records():
-    rows = ranking_ws.get_all_records()
-    clean = []
-    for r in rows:
-        if str(r.get("Ism", "")).strip():
-            clean.append(r)
-    return clean
+    return sheet_rows(ranking_ws, RANKING_HEADERS)
 
 
 def pending_records():
-    rows = pending_ws.get_all_records()
-    clean = []
-    for r in rows:
-        if str(r.get("ID", "")).strip():
-            clean.append(r)
-    return clean
+    return sheet_rows(pending_ws, PENDING_HEADERS)
 
 
 def history_records():
-    rows = history_ws.get_all_records()
-    clean = []
-    for r in rows:
-        if str(r.get("ID", "")).strip():
-            clean.append(r)
-    return clean
+    return sheet_rows(history_ws, HISTORY_HEADERS)
 
 
 def find_ranking_row(name: str):
-    records = ranking_records()
-    for idx, row in enumerate(records, start=2):
-        if str(row.get("Ism", "")).strip().lower() == name.strip().lower():
+    for idx, row in ranking_records():
+        if str(row["Ism"]).strip().lower() == name.strip().lower():
             return idx, row
     return None, None
 
@@ -244,11 +207,9 @@ def create_player_if_missing(name: str):
     if row_idx:
         return row_idx, row
 
-    ranking_ws.append_row(
-        [
-            name, 0, 0, 0, 0, 0, 0, INITIAL_RATING, 0, "-", now_str()
-        ]
-    )
+    ranking_ws.append_row([
+        name, 0, 0, 0, 0, 0, 0, INITIAL_RATING, 0, "-", now_str()
+    ])
     return find_ranking_row(name)
 
 
@@ -296,14 +257,14 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
 def update_player_stats(name: str, goals_for: int, goals_against: int, result: str, delta_rating: float):
     row_idx, row = create_player_if_missing(name)
 
-    games = safe_int(row.get("Oyinlar")) + 1
-    wins = safe_int(row.get("Galaba"))
-    draws = safe_int(row.get("Durang"))
-    losses = safe_int(row.get("Maglubiyat"))
-    gf = safe_int(row.get("UrganGoli")) + goals_for
-    ga = safe_int(row.get("OtkazganGoli")) + goals_against
-    rating = safe_float(row.get("Achko"), INITIAL_RATING) + float(delta_rating)
-    streak = safe_int(row.get("Streak"))
+    games = safe_int(row["Oyinlar"]) + 1
+    wins = safe_int(row["Galaba"])
+    draws = safe_int(row["Durang"])
+    losses = safe_int(row["Maglubiyat"])
+    gf = safe_int(row["UrganGoli"]) + goals_for
+    ga = safe_int(row["OtkazganGoli"]) + goals_against
+    rating = safe_float(row["Achko"], INITIAL_RATING) + float(delta_rating)
+    streak = safe_int(row["Streak"])
 
     if result == "W":
         wins += 1
@@ -321,21 +282,21 @@ def update_player_stats(name: str, goals_for: int, goals_against: int, result: s
     ranking_ws.update(
         f"A{row_idx}:K{row_idx}",
         [[
-            name, games, wins, draws, losses, gf, ga,
-            round(rating, 2), streak, last_result, now_str()
+            name, games, wins, draws, losses,
+            gf, ga, round(rating, 2), streak, last_result, now_str()
         ]]
     )
 
 
 def get_sorted_ranking():
-    rows = ranking_records()
+    rows = [row for _, row in ranking_records()]
     rows = sorted(
         rows,
         key=lambda x: (
-            safe_float(x.get("Achko")),
-            safe_int(x.get("Galaba")),
-            safe_int(x.get("UrganGoli")) - safe_int(x.get("OtkazganGoli")),
-            safe_int(x.get("UrganGoli")),
+            safe_float(x["Achko"]),
+            safe_int(x["Galaba"]),
+            safe_int(x["UrganGoli"]) - safe_int(x["OtkazganGoli"]),
+            safe_int(x["UrganGoli"]),
         ),
         reverse=True,
     )
@@ -367,9 +328,11 @@ def format_top3():
 
     medals = ["👑", "🥈", "🥉"]
     lines = ["🥇 <b>TOP 3</b>", ""]
+
     for i, row in enumerate(rows[:3], start=1):
+        medal = medals[i - 1]
         lines.append(
-            f"{medals[i-1]} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
+            f"{medal} <b>{i}. {esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
             f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | ⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
         )
     return "\n".join(lines)
@@ -381,26 +344,39 @@ def format_table():
         return "Hali reytingda o‘yinchi yo‘q."
 
     lines = ["🏆 <b>FIFA 07 REYTING JADVALI</b>", ""]
+
     top = rows[0]
     lines.append("━━━━━━━━━━━━━━")
     lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
-    lines.append(f"🎮 O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}")
-    lines.append(f"⚽ Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}")
+    lines.append(
+        f"🎮 O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}"
+    )
+    lines.append(
+        f"⚽ Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}"
+    )
     lines.append("━━━━━━━━━━━━━━")
     lines.append("")
 
     if len(rows) >= 2:
         second = rows[1]
         lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
-        lines.append(f"🎮 O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}")
-        lines.append(f"⚽ Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}")
+        lines.append(
+            f"🎮 O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}"
+        )
+        lines.append(
+            f"⚽ Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}"
+        )
         lines.append("")
 
     if len(rows) >= 3:
         third = rows[2]
         lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
-        lines.append(f"🎮 O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}")
-        lines.append(f"⚽ Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}")
+        lines.append(
+            f"🎮 O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}"
+        )
+        lines.append(
+            f"⚽ Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}"
+        )
         lines.append("")
 
     if len(rows) > 3:
@@ -453,9 +429,8 @@ def add_pending_result(p1, s1, s2, p2, submitted_by_id, submitted_by_name, chat_
 
 
 def find_pending_row(pending_id: str):
-    rows = pending_records()
-    for idx, row in enumerate(rows, start=2):
-        if str(row.get("ID", "")).strip() == pending_id:
+    for idx, row in pending_records():
+        if str(row["ID"]).strip() == pending_id:
             return idx, row
     return None, None
 
@@ -465,7 +440,7 @@ def set_pending_status(pending_id: str, status: str, message_id=None):
     if not row_idx:
         return False
 
-    approval_message_id = row.get("ApprovalMessageID", "")
+    approval_message_id = row["ApprovalMessageID"]
     if message_id is not None:
         approval_message_id = str(message_id)
 
@@ -489,8 +464,8 @@ def apply_approved_result(pending_row, approver_id):
     _, row1 = create_player_if_missing(p1)
     _, row2 = create_player_if_missing(p2)
 
-    old1 = safe_float(row1.get("Achko"), INITIAL_RATING)
-    old2 = safe_float(row2.get("Achko"), INITIAL_RATING)
+    old1 = safe_float(row1["Achko"], INITIAL_RATING)
+    old2 = safe_float(row2["Achko"], INITIAL_RATING)
 
     delta1, delta2 = calc_elo_change(old1, old2, s1, s2)
 
@@ -557,7 +532,7 @@ def pending_cmd(update: Update, context: CallbackContext):
         update.message.reply_text("⛔ Bu bo‘lim faqat Direktor uchun.")
         return
 
-    rows = [r for r in pending_records() if str(r.get("Status", "")).upper() == "PENDING"]
+    rows = [row for _, row in pending_records() if str(row["Status"]).upper() == "PENDING"]
     if not rows:
         update.message.reply_text("✅ Kutilayotgan natija yo‘q.")
         return
@@ -592,7 +567,7 @@ def handle_buttons(update: Update, context: CallbackContext):
             query.edit_message_text("❌ Bu pending natija topilmadi.")
             return
 
-        status = str(row.get("Status", "")).upper()
+        status = str(row["Status"]).upper()
         if status != "PENDING":
             query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
             return
