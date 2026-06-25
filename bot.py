@@ -10,6 +10,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import (
+    WebAppInfo,
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -550,7 +551,15 @@ def help_cmd(update: Update, context: CallbackContext):
 
 
 def table_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(format_table(), parse_mode="HTML", reply_markup=get_reply_menu())
+    webapp_url = f"{BASE_URL}/webapp"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "📊 Jadvalni ochish",
+            web_app=WebAppInfo(url=webapp_url)
+        )]
+    ])
+    msg = "📊 <b>Reyting jadvali</b>\n\nQuyidagi tugmani bosing:"
+    update.message.reply_text(msg, parse_mode="HTML", reply_markup=keyboard)
 
 
 def top3_cmd(update: Update, context: CallbackContext):
@@ -729,6 +738,280 @@ app = Flask(__name__)
 @app.route("/", methods=["GET"])
 def health():
     return "EFOOTBALL PC bot webhook is running", 200
+
+
+@app.route("/webapp", methods=["GET"])
+def webapp():
+    rows = get_sorted_ranking()
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+
+    rows_html = ""
+    for i, row in enumerate(rows, start=1):
+        medal = medals.get(i, "")
+        name  = html.escape(str(row["Ism"]))
+        achko = safe_float(row["Achko"])
+        o     = row["Oyinlar"]
+        g     = row["Galaba"]
+        d     = row["Durang"]
+        m     = row["Maglubiyat"]
+        gol   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        streak = safe_int(row.get("Streak", 0))
+        streak_str = f"+{streak}" if streak > 0 else str(streak)
+        rows_html += f"""
+        <tr onclick="showDetail(this)"
+            data-name="{name}" data-achko="{achko:.2f}"
+            data-o="{o}" data-g="{g}" data-d="{d}" data-m="{m}"
+            data-gol="{gol}" data-streak="{streak_str}">
+          <td class="num">{medal}{i}</td>
+          <td class="name">{name}</td>
+          <td>{o}</td>
+          <td class="win">{g}</td>
+          <td>{d}</td>
+          <td class="loss">{m}</td>
+          <td>{gol}</td>
+          <td class="achko">{achko:.2f}</td>
+        </tr>"""
+
+    page = f"""<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>eFootball Reyting</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0e1117;
+    color: #e0e6f0;
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }}
+  .header {{
+    background: linear-gradient(135deg, #1a2540 0%, #0e1117 100%);
+    border-bottom: 2px solid #f0b429;
+    padding: 16px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }}
+  .header h1 {{
+    font-size: 16px;
+    font-weight: 700;
+    color: #f0b429;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }}
+  .header p {{
+    font-size: 11px;
+    color: #7a8aaa;
+    margin-top: 2px;
+  }}
+  .table-wrap {{
+    overflow-x: auto;
+    padding: 12px 8px;
+  }}
+  table {{
+    width: 100%;
+    min-width: 340px;
+    border-collapse: collapse;
+    font-size: 13px;
+  }}
+  thead tr {{
+    background: #1a2540;
+  }}
+  thead th {{
+    padding: 10px 6px;
+    text-align: center;
+    color: #7a8aaa;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #2a3550;
+    white-space: nowrap;
+  }}
+  thead th:nth-child(2) {{ text-align: left; padding-left: 8px; }}
+  tbody tr {{
+    border-bottom: 1px solid #1a2540;
+    cursor: pointer;
+    transition: background 0.15s;
+  }}
+  tbody tr:hover, tbody tr.active {{
+    background: #1e2d50 !important;
+    border-bottom-color: #f0b429;
+  }}
+  tbody tr:nth-child(odd) {{ background: #12181f; }}
+  tbody tr:nth-child(even) {{ background: #0e1117; }}
+  tbody tr:first-child {{ background: linear-gradient(90deg, #1a2a10 0%, #12181f 100%); }}
+  tbody tr:nth-child(2) {{ background: linear-gradient(90deg, #1a1e2a 0%, #12181f 100%); }}
+  tbody tr:nth-child(3) {{ background: linear-gradient(90deg, #1a1510 0%, #12181f 100%); }}
+  td {{
+    padding: 10px 6px;
+    text-align: center;
+    white-space: nowrap;
+  }}
+  td.num {{
+    font-size: 15px;
+    width: 36px;
+  }}
+  td.name {{
+    text-align: left;
+    padding-left: 8px;
+    font-weight: 600;
+    color: #e8eef8;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }}
+  td.win  {{ color: #4caf7d; font-weight: 600; }}
+  td.loss {{ color: #e05a5a; font-weight: 600; }}
+  td.achko {{
+    color: #f0b429;
+    font-weight: 700;
+    font-size: 13px;
+  }}
+
+  /* Detail panel */
+  .detail {{
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: #1a2540;
+    border-top: 2px solid #f0b429;
+    border-radius: 18px 18px 0 0;
+    padding: 20px 20px 30px;
+    z-index: 100;
+    animation: slideUp 0.25s ease;
+  }}
+  .detail.show {{ display: block; }}
+  @keyframes slideUp {{
+    from {{ transform: translateY(100%); opacity: 0; }}
+    to   {{ transform: translateY(0);   opacity: 1; }}
+  }}
+  .detail-close {{
+    position: absolute;
+    top: 12px; right: 16px;
+    background: none; border: none;
+    color: #7a8aaa; font-size: 22px;
+    cursor: pointer; line-height: 1;
+  }}
+  .detail h2 {{
+    font-size: 20px;
+    color: #f0b429;
+    margin-bottom: 4px;
+  }}
+  .detail .achko-big {{
+    font-size: 32px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 14px;
+  }}
+  .detail-grid {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }}
+  .stat-box {{
+    background: #0e1117;
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+  }}
+  .stat-box .val {{
+    font-size: 22px;
+    font-weight: 700;
+    color: #e8eef8;
+  }}
+  .stat-box .lbl {{
+    font-size: 11px;
+    color: #7a8aaa;
+    margin-top: 2px;
+  }}
+  .stat-box.green .val {{ color: #4caf7d; }}
+  .stat-box.red   .val {{ color: #e05a5a; }}
+  .stat-box.gold  .val {{ color: #f0b429; }}
+  .overlay {{
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+  }}
+  .overlay.show {{ display: block; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>⚽ eFootball Reyting</h1>
+  <p>O'yinchiga bosib batafsil ko'ring</p>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>№</th>
+      <th style="text-align:left;padding-left:8px">O'yinchi</th>
+      <th>O'</th>
+      <th>G'</th>
+      <th>D</th>
+      <th>M</th>
+      <th>Gol</th>
+      <th>Achko</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows_html}
+  </tbody>
+</table>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeDetail()"></div>
+<div class="detail" id="detail">
+  <button class="detail-close" onclick="closeDetail()">✕</button>
+  <h2 id="d-name"></h2>
+  <div class="achko-big" id="d-achko"></div>
+  <div class="detail-grid">
+    <div class="stat-box"><div class="val" id="d-o"></div><div class="lbl">O'yin</div></div>
+    <div class="stat-box green"><div class="val" id="d-g"></div><div class="lbl">G'alaba</div></div>
+    <div class="stat-box"><div class="val" id="d-d"></div><div class="lbl">Durang</div></div>
+    <div class="stat-box red"><div class="val" id="d-m"></div><div class="lbl">Mag'lubiyat</div></div>
+    <div class="stat-box gold"><div class="val" id="d-gol"></div><div class="lbl">Gollar</div></div>
+    <div class="stat-box"><div class="val" id="d-streak"></div><div class="lbl">Streak</div></div>
+  </div>
+</div>
+
+<script>
+  try {{ Telegram.WebApp.ready(); Telegram.WebApp.expand(); }} catch(e) {{}}
+
+  function showDetail(row) {{
+    document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("active"));
+    row.classList.add("active");
+    document.getElementById("d-name").textContent   = row.dataset.name;
+    document.getElementById("d-achko").textContent  = "⭐ " + row.dataset.achko;
+    document.getElementById("d-o").textContent      = row.dataset.o;
+    document.getElementById("d-g").textContent      = row.dataset.g;
+    document.getElementById("d-d").textContent      = row.dataset.d;
+    document.getElementById("d-m").textContent      = row.dataset.m;
+    document.getElementById("d-gol").textContent    = row.dataset.gol;
+    document.getElementById("d-streak").textContent = row.dataset.streak;
+    document.getElementById("detail").classList.add("show");
+    document.getElementById("overlay").classList.add("show");
+  }}
+
+  function closeDetail() {{
+    document.getElementById("detail").classList.remove("show");
+    document.getElementById("overlay").classList.remove("show");
+    document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("active"));
+  }}
+</script>
+</body>
+</html>"""
+    return page, 200, {{"Content-Type": "text/html; charset=utf-8"}}
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
