@@ -362,56 +362,57 @@ def format_table():
     if not rows:
         return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
 
-    medals = {1: "👑", 2: "🥈", 3: "🥉"}
+    # Emoji o'rniga oddiy belgilar — monospace ustunlar tekis chiqadi
+    medals = {1: "* ", 2: "**", 3: "~ "}
 
-    # Header qismi (HTML bold)
     title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
 
-    # Monospace jadval <pre> ichida
-    col_n    = 4   # "№"
+    # Ustun kengliklari
+    col_num  = 5   # "1.  "
     col_name = 13  # "O'yinchi"
-    col_o    = 4   # O'yin
-    col_g    = 4   # G'alaba
-    col_d    = 4   # Durang
-    col_m    = 4   # Mag'lubiyat
-    col_gol  = 8   # Gollar
+    col_o    = 3   # O'yin
+    col_g    = 3   # G'alaba
+    col_d    = 3   # Durang
+    col_m    = 3   # Mag'lubiyat
+    col_gol  = 7   # Gollar
     col_ach  = 8   # Achko
 
-    sep = "─" * (col_n + col_name + col_o + col_g + col_d + col_m + col_gol + col_ach + 7)
+    total = col_num + col_name + col_o + col_g + col_d + col_m + col_gol + col_ach + 7
+    sep = "─" * total
 
-    h_n   = "№"
-    h_nam = "O'yinchi"
-    h_o   = "O'"
-    h_g   = "G'"
-    h_d   = "D"
-    h_m   = "M"
-    h_gol = "Gol"
-    h_ach = "Achko"
+    h_num  = "№"
+    h_nam  = "O'yinchi"
+    h_o    = "O'"
+    h_g    = "G'"
+    h_d    = "D"
+    h_m    = "M"
+    h_gol  = "Gol"
+    h_ach  = "Achko"
 
     header_row = (
-        f"{h_n:<{col_n}} {h_nam:<{col_name}} {h_o:<{col_o}} {h_g:<{col_g}} "
-        f"{h_d:<{col_d}} {h_m:<{col_m}} {h_gol:<{col_gol}} {h_ach:>{col_ach}}"
+        f"{h_num:<{col_num}} {h_nam:<{col_name}} "
+        f"{h_o:>{col_o}} {h_g:>{col_g}} {h_d:>{col_d}} {h_m:>{col_m}} "
+        f"{h_gol:>{col_gol}} {h_ach:>{col_ach}}"
     )
 
     table_lines = [header_row, sep]
 
     for i, row in enumerate(rows, start=1):
-        medal = medals.get(i, "")
-        # Medal belgisi bilan raqam (masalan: "👑1.")
-        num_str = f"{medal}{i}."
-        name = str(row['Ism'])
-        # Nom 12 belgidan uzun bo'lsa qisqartir
+        badge = medals.get(i, "  ")
+        num_str = f"{badge}{i}."     # masalan: "* 1."  "**2."  "~ 3."  "  4."
+
+        name = str(row["Ism"])
         if len(name) > 12:
             name = name[:11] + "."
 
-        gol_str = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        gol_str   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
         achko_str = f"{safe_float(row['Achko']):.2f}"
 
         line = (
-            f"{num_str:<{col_n}} {name:<{col_name}} "
-            f"{row['Oyinlar']:<{col_o}} {row['Galaba']:<{col_g}} "
-            f"{row['Durang']:<{col_d}} {row['Maglubiyat']:<{col_m}} "
-            f"{gol_str:<{col_gol}} {achko_str:>{col_ach}}"
+            f"{num_str:<{col_num}} {name:<{col_name}} "
+            f"{row['Oyinlar']:>{col_o}} {row['Galaba']:>{col_g}} "
+            f"{row['Durang']:>{col_d}} {row['Maglubiyat']:>{col_m}} "
+            f"{gol_str:>{col_gol}} {achko_str:>{col_ach}}"
         )
         table_lines.append(line)
 
