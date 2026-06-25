@@ -10,7 +10,6 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import (
-    WebAppInfo,
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -40,7 +39,7 @@ INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
-BASE_URL = os.environ["BASE_URL"].rstrip("/")
+BASE_URL = os.environ["BASE_URL"].rstrip("/")  # masalan: https://fifa07-elo-bot.onrender.com
 PORT = int(os.environ.get("PORT", 10000))
 
 # =========================
@@ -326,7 +325,7 @@ def format_top_banner(rows):
     if not rows:
         return (
             "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
-            "👑 <b>Chempion:</b> Hali yo'q\n"
+            "👑 <b>Chempion:</b> Hali yo‘q\n"
             "⭐ <b>Achko:</b> -"
         )
 
@@ -335,7 +334,7 @@ def format_top_banner(rows):
         "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
         f"👑 <b>Chempion:</b> {esc(top['Ism'])}\n"
         f"⭐ <b>Achko:</b> {safe_float(top['Achko']):.2f}\n"
-        f"🎮 <b>O'yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
+        f"🎮 <b>O‘yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
         f"⚽ <b>Gollar:</b> {top['UrganGoli']}-{top['OtkazganGoli']}"
     )
 
@@ -343,7 +342,7 @@ def format_top_banner(rows):
 def format_top3():
     rows = get_sorted_ranking()
     if not rows:
-        return "🏅 TOP 3\n\nHali reyting yo'q."
+        return "🏅 TOP 3\n\nHali reyting yo‘q."
 
     lines = ["🏅 <b>TOP 3</b>", ""]
     medals = ["👑", "🥈", "🥉"]
@@ -361,65 +360,43 @@ def format_top3():
 def format_table():
     rows = get_sorted_ranking()
     if not rows:
-        return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
+        return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o‘yinchi yo‘q."
 
-    title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
+    lines = ["🏆 <b>EFOOTBALL PC REYTING JADVALI</b>", ""]
 
-    # Ustun kengliklari (telefon uchun qisqa)
-    col_n   = 4   # №
-    col_nm  = 10  # Ism
-    col_o   = 2   # O'
-    col_g   = 2   # G'
-    col_d   = 2   # D
-    col_m   = 2   # M
-    col_gl  = 6   # Gol
-    col_ac  = 7   # Achko
+    top = rows[0]
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
+    lines.append(f"⚽ O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}")
+    lines.append(f"🥅 Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}")
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
 
-    h = "\u2500"
-    vl = "\u2502"
+    if len(rows) >= 2:
+        second = rows[1]
+        lines.append("")
+        lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
+        lines.append(f"⚽ O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}")
+        lines.append(f"🥅 Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}")
 
-    def make_border(l, m, r):
-        segs = [h*col_n, h*col_nm, h*col_o, h*col_g, h*col_d, h*col_m, h*col_gl, h*col_ac]
-        return l + m.join(segs) + r
+    if len(rows) >= 3:
+        third = rows[2]
+        lines.append("")
+        lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
+        lines.append(f"⚽ O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}")
+        lines.append(f"🥅 Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}")
 
-    top    = make_border("\u250c", "\u252c", "\u2510")
-    mid    = make_border("\u251c", "\u253c", "\u2524")
-    bottom = make_border("\u2514", "\u2534", "\u2518")
+    if len(rows) > 3:
+        lines.append("")
+        lines.append("📋 <b>Qolganlar:</b>")
+        for i, row in enumerate(rows[3:], start=4):
+            lines.append(
+                f"{i}. <b>{esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
+                f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | 🤝 {row['Durang']} | ❌ {row['Maglubiyat']} | "
+                f"⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
+            )
+    return "\n".join(lines)
 
-    def row(n, nm, o, g, d, m, gl, ac):
-        return (
-            f"{vl}{n:^{col_n}}{vl}{nm:<{col_nm}}"
-            f"{vl}{o:^{col_o}}{vl}{g:^{col_g}}"
-            f"{vl}{d:^{col_d}}{vl}{m:^{col_m}}"
-            f"{vl}{gl:^{col_gl}}{vl}{ac:^{col_ac}}{vl}"
-        )
 
-    h_n  = "\u2116"
-    h_nm = "Ism"
-    h_o  = "O"
-    h_g  = "G"
-    h_d  = "D"
-    h_m  = "M"
-    h_gl = "Gol"
-    h_ac = "Achko"
-
-    lines = [top, row(h_n, h_nm, h_o, h_g, h_d, h_m, h_gl, h_ac), mid]
-
-    for i, r in enumerate(rows, start=1):
-        nm = str(r["Ism"])
-        if len(nm) > col_nm:
-            nm = nm[:col_nm-1] + "."
-        gl  = f"{r['UrganGoli']}-{r['OtkazganGoli']}"
-        ac  = f"{safe_float(r['Achko']):.1f}"
-        lines.append(row(
-            f"{i}.", nm,
-            str(r["Oyinlar"]), str(r["Galaba"]),
-            str(r["Durang"]),  str(r["Maglubiyat"]),
-            gl, ac
-        ))
-
-    lines.append(bottom)
-    return title + "<pre>" + "\n".join(lines) + "</pre>"
 def format_menu_text():
     return (
         "📋 <b>Bot menyusi</b>\n\n"
@@ -428,7 +405,7 @@ def format_menu_text():
         "Komandalar:\n"
         "/start - Boshlash\n"
         "/menu - Menyu\n"
-        "/table - To'liq jadval\n"
+        "/table - To‘liq jadval\n"
         "/top3 - Top 3\n"
         "/pending - Kutilayotgan natijalar\n"
         "/reset - Reytingni tozalash (Admin)\n"
@@ -442,9 +419,9 @@ def format_help_text():
         "ℹ️ <b>Qoidalar</b>\n\n"
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
-        "3) Tasdiqlash faqat <b>Admin</b> tomonidan bo'ladi.\n"
-        "4) Achko ELOga o'xshash hisoblanadi.\n"
-        "5) To'g'ri format:\n"
+        "3) Tasdiqlash faqat <b>Admin</b> tomonidan bo‘ladi.\n"
+        "4) Achko ELOga o‘xshash hisoblanadi.\n"
+        "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
 
@@ -564,12 +541,12 @@ def top3_cmd(update: Update, context: CallbackContext):
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
-        update.message.reply_text("⛔ Bu bo'lim faqat admin uchun.")
+        update.message.reply_text("⛔ Bu bo‘lim faqat admin uchun.")
         return
 
     rows = [row for _, row in pending_records() if str(row["Status"]).upper() == "PENDING"]
     if not rows:
-        update.message.reply_text("✅ Kutilayotgan natija yo'q.")
+        update.message.reply_text("✅ Kutilayotgan natija yo‘q.")
         return
 
     lines = ["⏳ <b>Kutilayotgan natijalar</b>", ""]
@@ -629,7 +606,7 @@ def handle_buttons(update: Update, context: CallbackContext):
 
         status = str(row["Status"]).upper()
         if status != "PENDING":
-            query.answer("Bu natija allaqachon ko'rib chiqilgan.", show_alert=True)
+            query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
             return
 
         p1 = esc(row["Player1"])
@@ -734,280 +711,6 @@ app = Flask(__name__)
 @app.route("/", methods=["GET"])
 def health():
     return "EFOOTBALL PC bot webhook is running", 200
-
-
-@app.route("/webapp", methods=["GET"])
-def webapp():
-    rows = get_sorted_ranking()
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-
-    rows_html = ""
-    for i, row in enumerate(rows, start=1):
-        medal = medals.get(i, "")
-        name  = html.escape(str(row["Ism"]))
-        achko = safe_float(row["Achko"])
-        o     = row["Oyinlar"]
-        g     = row["Galaba"]
-        d     = row["Durang"]
-        m     = row["Maglubiyat"]
-        gol   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
-        streak = safe_int(row.get("Streak", 0))
-        streak_str = f"+{streak}" if streak > 0 else str(streak)
-        rows_html += f"""
-        <tr onclick="showDetail(this)"
-            data-name="{name}" data-achko="{achko:.2f}"
-            data-o="{o}" data-g="{g}" data-d="{d}" data-m="{m}"
-            data-gol="{gol}" data-streak="{streak_str}">
-          <td class="num">{medal}{i}</td>
-          <td class="name">{name}</td>
-          <td>{o}</td>
-          <td class="win">{g}</td>
-          <td>{d}</td>
-          <td class="loss">{m}</td>
-          <td>{gol}</td>
-          <td class="achko">{achko:.2f}</td>
-        </tr>"""
-
-    page = f"""<!DOCTYPE html>
-<html lang="uz">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>eFootball Reyting</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #0e1117;
-    color: #e0e6f0;
-    min-height: 100vh;
-    padding-bottom: 80px;
-  }}
-  .header {{
-    background: linear-gradient(135deg, #1a2540 0%, #0e1117 100%);
-    border-bottom: 2px solid #f0b429;
-    padding: 16px;
-    text-align: center;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }}
-  .header h1 {{
-    font-size: 16px;
-    font-weight: 700;
-    color: #f0b429;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }}
-  .header p {{
-    font-size: 11px;
-    color: #7a8aaa;
-    margin-top: 2px;
-  }}
-  .table-wrap {{
-    overflow-x: auto;
-    padding: 12px 8px;
-  }}
-  table {{
-    width: 100%;
-    min-width: 340px;
-    border-collapse: collapse;
-    font-size: 13px;
-  }}
-  thead tr {{
-    background: #1a2540;
-  }}
-  thead th {{
-    padding: 10px 6px;
-    text-align: center;
-    color: #7a8aaa;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    border-bottom: 1px solid #2a3550;
-    white-space: nowrap;
-  }}
-  thead th:nth-child(2) {{ text-align: left; padding-left: 8px; }}
-  tbody tr {{
-    border-bottom: 1px solid #1a2540;
-    cursor: pointer;
-    transition: background 0.15s;
-  }}
-  tbody tr:hover, tbody tr.active {{
-    background: #1e2d50 !important;
-    border-bottom-color: #f0b429;
-  }}
-  tbody tr:nth-child(odd) {{ background: #12181f; }}
-  tbody tr:nth-child(even) {{ background: #0e1117; }}
-  tbody tr:first-child {{ background: linear-gradient(90deg, #1a2a10 0%, #12181f 100%); }}
-  tbody tr:nth-child(2) {{ background: linear-gradient(90deg, #1a1e2a 0%, #12181f 100%); }}
-  tbody tr:nth-child(3) {{ background: linear-gradient(90deg, #1a1510 0%, #12181f 100%); }}
-  td {{
-    padding: 10px 6px;
-    text-align: center;
-    white-space: nowrap;
-  }}
-  td.num {{
-    font-size: 15px;
-    width: 36px;
-  }}
-  td.name {{
-    text-align: left;
-    padding-left: 8px;
-    font-weight: 600;
-    color: #e8eef8;
-    max-width: 110px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }}
-  td.win  {{ color: #4caf7d; font-weight: 600; }}
-  td.loss {{ color: #e05a5a; font-weight: 600; }}
-  td.achko {{
-    color: #f0b429;
-    font-weight: 700;
-    font-size: 13px;
-  }}
-
-  /* Detail panel */
-  .detail {{
-    display: none;
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    background: #1a2540;
-    border-top: 2px solid #f0b429;
-    border-radius: 18px 18px 0 0;
-    padding: 20px 20px 30px;
-    z-index: 100;
-    animation: slideUp 0.25s ease;
-  }}
-  .detail.show {{ display: block; }}
-  @keyframes slideUp {{
-    from {{ transform: translateY(100%); opacity: 0; }}
-    to   {{ transform: translateY(0);   opacity: 1; }}
-  }}
-  .detail-close {{
-    position: absolute;
-    top: 12px; right: 16px;
-    background: none; border: none;
-    color: #7a8aaa; font-size: 22px;
-    cursor: pointer; line-height: 1;
-  }}
-  .detail h2 {{
-    font-size: 20px;
-    color: #f0b429;
-    margin-bottom: 4px;
-  }}
-  .detail .achko-big {{
-    font-size: 32px;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1;
-    margin-bottom: 14px;
-  }}
-  .detail-grid {{
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-  }}
-  .stat-box {{
-    background: #0e1117;
-    border-radius: 10px;
-    padding: 10px 8px;
-    text-align: center;
-  }}
-  .stat-box .val {{
-    font-size: 22px;
-    font-weight: 700;
-    color: #e8eef8;
-  }}
-  .stat-box .lbl {{
-    font-size: 11px;
-    color: #7a8aaa;
-    margin-top: 2px;
-  }}
-  .stat-box.green .val {{ color: #4caf7d; }}
-  .stat-box.red   .val {{ color: #e05a5a; }}
-  .stat-box.gold  .val {{ color: #f0b429; }}
-  .overlay {{
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.5);
-    z-index: 99;
-  }}
-  .overlay.show {{ display: block; }}
-</style>
-</head>
-<body>
-<div class="header">
-  <h1>⚽ eFootball Reyting</h1>
-  <p>O'yinchiga bosib batafsil ko'ring</p>
-</div>
-
-<div class="table-wrap">
-<table>
-  <thead>
-    <tr>
-      <th>№</th>
-      <th style="text-align:left;padding-left:8px">O'yinchi</th>
-      <th>O'</th>
-      <th>G'</th>
-      <th>D</th>
-      <th>M</th>
-      <th>Gol</th>
-      <th>Achko</th>
-    </tr>
-  </thead>
-  <tbody>
-    {rows_html}
-  </tbody>
-</table>
-</div>
-
-<div class="overlay" id="overlay" onclick="closeDetail()"></div>
-<div class="detail" id="detail">
-  <button class="detail-close" onclick="closeDetail()">✕</button>
-  <h2 id="d-name"></h2>
-  <div class="achko-big" id="d-achko"></div>
-  <div class="detail-grid">
-    <div class="stat-box"><div class="val" id="d-o"></div><div class="lbl">O'yin</div></div>
-    <div class="stat-box green"><div class="val" id="d-g"></div><div class="lbl">G'alaba</div></div>
-    <div class="stat-box"><div class="val" id="d-d"></div><div class="lbl">Durang</div></div>
-    <div class="stat-box red"><div class="val" id="d-m"></div><div class="lbl">Mag'lubiyat</div></div>
-    <div class="stat-box gold"><div class="val" id="d-gol"></div><div class="lbl">Gollar</div></div>
-    <div class="stat-box"><div class="val" id="d-streak"></div><div class="lbl">Streak</div></div>
-  </div>
-</div>
-
-<script>
-  try {{ Telegram.WebApp.ready(); Telegram.WebApp.expand(); }} catch(e) {{}}
-
-  function showDetail(row) {{
-    document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("active"));
-    row.classList.add("active");
-    document.getElementById("d-name").textContent   = row.dataset.name;
-    document.getElementById("d-achko").textContent  = "⭐ " + row.dataset.achko;
-    document.getElementById("d-o").textContent      = row.dataset.o;
-    document.getElementById("d-g").textContent      = row.dataset.g;
-    document.getElementById("d-d").textContent      = row.dataset.d;
-    document.getElementById("d-m").textContent      = row.dataset.m;
-    document.getElementById("d-gol").textContent    = row.dataset.gol;
-    document.getElementById("d-streak").textContent = row.dataset.streak;
-    document.getElementById("detail").classList.add("show");
-    document.getElementById("overlay").classList.add("show");
-  }}
-
-  function closeDetail() {{
-    document.getElementById("detail").classList.remove("show");
-    document.getElementById("overlay").classList.remove("show");
-    document.querySelectorAll("tbody tr").forEach(r => r.classList.remove("active"));
-  }}
-</script>
-</body>
-</html>"""
-    return page, 200, {{"Content-Type": "text/html; charset=utf-8"}}
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
