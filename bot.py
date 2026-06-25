@@ -375,6 +375,9 @@ def format_top_banner(rows):
         f"⚽ <b>Gollar:</b> {top['UrganGoli']}-{top['OtkazganGoli']}"
     )
 
+# =========================
+# TOP 3 - ESKI HOLICHA
+# =========================
 def format_top3():
     rows = get_sorted_ranking()
     if not rows:
@@ -393,10 +396,10 @@ def format_top3():
     return "\n".join(lines)
 
 # =========================
-# YANGI CHIROYLI MATNLI JADVAL
+# CHIROYLI MATNLI JADVAL - TELEFON UCHUN
 # =========================
 def format_beautiful_table():
-    """Chiroyli matnli jadval - rasmdagidek ko'rinish"""
+    """Telefonda ham chiroyli ko'rinadigan jadval"""
     rows = get_sorted_ranking()
     
     if not rows:
@@ -407,16 +410,19 @@ def format_beautiful_table():
     result.append("🏆 <b>EFOOTBALL PC REYTING</b>")
     result.append("")
     
-    # Jadval sarlavhasi
-    result.append("<code>┌────┬──────────────────┬─────┬─────┬─────┬─────┬─────────┬─────────┐</code>")
-    result.append("<code>│ N° │ O'YINCHI         │  O' │  G' │  D  │  M  │   GOL   │  ACHKO  │</code>")
-    result.append("<code>├────┼──────────────────┼─────┼─────┼─────┼─────┼─────────┼─────────┤</code>")
+    # Jadvalni code blokida yuborish uchun
+    table_lines = []
+    
+    # Yuqori chegara
+    table_lines.append("┌────┬──────────────────┬─────┬─────┬─────┬─────┬─────────┬─────────┐")
+    table_lines.append("│ N° │ O'YINCHI         │  O' │  G' │  D  │  M  │   GOL   │  ACHKO  │")
+    table_lines.append("├────┼──────────────────┼─────┼─────┼─────┼─────┼─────────┼─────────┤")
     
     # Ma'lumotlar
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     
     for i, row in enumerate(rows[:15], start=1):
-        # Ismni qisqartirish
+        # Ismni qisqartirish (16 belgigacha)
         name = str(row["Ism"])
         if len(name) > 16:
             name = name[:14] + ".."
@@ -428,58 +434,34 @@ def format_beautiful_table():
             num = f"{i:2d}"
         
         # Ma'lumotlarni formatlash
-        o = f"{row['Oyinlar']:3d}"
-        g = f"{row['Galaba']:3d}"
-        d = f"{row['Durang']:3d}"
-        m = f"{row['Maglubiyat']:3d}"
+        o = f"{row['Oyinlar']:2d}"
+        g = f"{row['Galaba']:2d}"
+        d = f"{row['Durang']:2d}"
+        m = f"{row['Maglubiyat']:2d}"
         gol = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
         achko = f"{float(row['Achko']):.0f}"
         
-        # Rangli chiqish
-        if i == 1:
-            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
-        elif i == 2:
-            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
-        elif i == 3:
-            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
-        else:
-            result.append(f"<code>│ {num} │ {name:16} │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
+        # Ismni o'ngga tekislash
+        name_padded = name.ljust(16)
+        
+        table_lines.append(
+            f"│ {num} │ {name_padded} │  {o} │  {g} │  {d} │  {m} │  {gol:5} │ {achko:5} │"
+        )
     
-    result.append("<code>└────┴──────────────────┴─────┴─────┴─────┴─────┴─────────┴─────────┘</code>")
-    result.append("")
+    # Pastki chegara
+    table_lines.append("└────┴──────────────────┴─────┴─────┴─────┴─────┴─────────┴─────────┘")
     
     # Sana va vaqt
-    result.append(f"📅 Yangilangan: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    result.append("")
-    result.append("📊 <b>EFOOTBALL PC</b>")
+    table_lines.append("")
+    table_lines.append(f"📅 Yangilangan: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    table_lines.append("")
+    table_lines.append("📊 <b>EFOOTBALL PC</b>")
     
-    return "\n".join(result)
-
-def format_beautiful_top3():
-    """Chiroyli Top 3 matn ko'rinishida"""
-    rows = get_sorted_ranking()
+    # Code blokida yuborish (monospace shrift)
+    table_text = "\n".join(table_lines)
     
-    if not rows:
-        return "🏅 <b>TOP 3</b>\n\n📊 Hali reyting yo'q."
-    
-    result = []
-    result.append("🏅 <b>TOP 3</b>")
-    result.append("")
-    
-    medals = ["🥇", "🥈", "🥉"]
-    
-    for i, row in enumerate(rows[:3], start=1):
-        name = str(row["Ism"])
-        achko = f"{float(row['Achko']):.0f}"
-        o = row['Oyinlar']
-        g = row['Galaba']
-        d = row['Durang']
-        m = row['Maglubiyat']
-        gol = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
-        
-        result.append(f"{medals[i-1]} <b>{i}. {name}</b>")
-        result.append(f"   ⭐ Achko: {achko} | O' {o} | G' {g} | D {d} | M {m} | ⚽ {gol}")
-        result.append("")
+    # HTML bilan yuborish
+    result.append(f"<pre>{table_text}</pre>")
     
     return "\n".join(result)
 
@@ -656,10 +638,14 @@ def help_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 def table_cmd(update: Update, context: CallbackContext):
-    """Chiroyli matnli jadval yuborish"""
+    """Chiroyli matnli jadval yuborish - telefon uchun optimallashtirilgan"""
     try:
         text = format_beautiful_table()
-        update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
+        update.message.reply_text(
+            text, 
+            parse_mode="HTML", 
+            reply_markup=get_reply_menu()
+        )
         logger.info(f"✅ Jadval yuborildi: {update.effective_user.full_name}")
     except Exception as e:
         logger.error(f"❌ Jadval yuborishda xatolik: {e}")
@@ -670,18 +656,13 @@ def table_cmd(update: Update, context: CallbackContext):
         )
 
 def top3_cmd(update: Update, context: CallbackContext):
-    """Chiroyli Top 3 yuborish"""
-    try:
-        text = format_beautiful_top3()
-        update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
-        logger.info(f"✅ Top3 yuborildi: {update.effective_user.full_name}")
-    except Exception as e:
-        logger.error(f"❌ Top3 yuborishda xatolik: {e}")
-        update.message.reply_text(
-            format_top3(),
-            parse_mode="HTML",
-            reply_markup=get_reply_menu()
-        )
+    """Top 3 - eski holicha"""
+    update.message.reply_text(
+        format_top3(),
+        parse_mode="HTML",
+        reply_markup=get_reply_menu()
+    )
+    logger.info(f"✅ Top3 yuborildi: {update.effective_user.full_name}")
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
@@ -870,7 +851,6 @@ def health():
 
 @app.route("/webapp", methods=["GET"])
 def webapp():
-    """WebApp - bu yerda jadval o'zgarmaydi"""
     rows = get_cached_ranking()
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
