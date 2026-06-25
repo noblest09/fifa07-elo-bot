@@ -3,7 +3,6 @@ import re
 import uuid
 import html
 import logging
-import tempfile
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 
@@ -12,7 +11,6 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 from telegram import (
-    WebAppInfo,
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -27,10 +25,6 @@ from telegram.ext import (
     CallbackContext,
     CallbackQueryHandler,
 )
-
-# PIL uchun importlar
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-import sys
 
 # =========================
 # LOGGING SOZLAMALARI
@@ -58,14 +52,13 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN")
 BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 PORT = int(os.environ.get("PORT", 10000))
 
-# TOKEN va BASE_URL ni tekshirish
 if not TOKEN or not BASE_URL:
-    raise ValueError("❌ TOKEN yoki BASE_URL topilmadi! Iltimos, muhit o'zgaruvchilarini tekshiring.")
+    raise ValueError("❌ TOKEN yoki BASE_URL topilmadi!")
 
 # =========================
 # KESH SOZLAMALARI
 # =========================
-CACHE_TTL = 30  # 30 soniya
+CACHE_TTL = 30
 ranking_cache = {"data": None, "timestamp": 0}
 
 # =========================
@@ -213,7 +206,6 @@ def sheet_rows(ws, headers):
         return []
 
 def get_cached_ranking():
-    """Kesh bilan ranking ma'lumotlarini olish"""
     global ranking_cache
     current_time = datetime.now().timestamp()
     
@@ -400,7 +392,99 @@ def format_top3():
 
     return "\n".join(lines)
 
-def format_table():
+# =========================
+# YANGI CHIROYLI MATNLI JADVAL
+# =========================
+def format_beautiful_table():
+    """Chiroyli matnli jadval - rasmdagidek ko'rinish"""
+    rows = get_sorted_ranking()
+    
+    if not rows:
+        return "🏆 <b>EFOOTBALL PC REYTING</b>\n\n📊 Hali reytingda o'yinchi yo'q."
+    
+    # Sarlavha
+    result = []
+    result.append("🏆 <b>EFOOTBALL PC REYTING</b>")
+    result.append("")
+    
+    # Jadval sarlavhasi
+    result.append("<code>┌────┬──────────────────┬─────┬─────┬─────┬─────┬─────────┬─────────┐</code>")
+    result.append("<code>│ N° │ O'YINCHI         │  O' │  G' │  D  │  M  │   GOL   │  ACHKO  │</code>")
+    result.append("<code>├────┼──────────────────┼─────┼─────┼─────┼─────┼─────────┼─────────┤</code>")
+    
+    # Ma'lumotlar
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    
+    for i, row in enumerate(rows[:15], start=1):
+        # Ismni qisqartirish
+        name = str(row["Ism"])
+        if len(name) > 16:
+            name = name[:14] + ".."
+        
+        # Medal yoki raqam
+        if i in medals:
+            num = medals[i]
+        else:
+            num = f"{i:2d}"
+        
+        # Ma'lumotlarni formatlash
+        o = f"{row['Oyinlar']:3d}"
+        g = f"{row['Galaba']:3d}"
+        d = f"{row['Durang']:3d}"
+        m = f"{row['Maglubiyat']:3d}"
+        gol = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        achko = f"{float(row['Achko']):.0f}"
+        
+        # Rangli chiqish
+        if i == 1:
+            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
+        elif i == 2:
+            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
+        elif i == 3:
+            result.append(f"<code>│ {num} │ </code><b>{name:16}</b><code> │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
+        else:
+            result.append(f"<code>│ {num} │ {name:16} │ {o} │ {g} │ {d} │ {m} │ {gol:7} │ {achko:7} │</code>")
+    
+    result.append("<code>└────┴──────────────────┴─────┴─────┴─────┴─────┴─────────┴─────────┘</code>")
+    result.append("")
+    
+    # Sana va vaqt
+    result.append(f"📅 Yangilangan: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    result.append("")
+    result.append("📊 <b>EFOOTBALL PC</b>")
+    
+    return "\n".join(result)
+
+def format_beautiful_top3():
+    """Chiroyli Top 3 matn ko'rinishida"""
+    rows = get_sorted_ranking()
+    
+    if not rows:
+        return "🏅 <b>TOP 3</b>\n\n📊 Hali reyting yo'q."
+    
+    result = []
+    result.append("🏅 <b>TOP 3</b>")
+    result.append("")
+    
+    medals = ["🥇", "🥈", "🥉"]
+    
+    for i, row in enumerate(rows[:3], start=1):
+        name = str(row["Ism"])
+        achko = f"{float(row['Achko']):.0f}"
+        o = row['Oyinlar']
+        g = row['Galaba']
+        d = row['Durang']
+        m = row['Maglubiyat']
+        gol = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        
+        result.append(f"{medals[i-1]} <b>{i}. {name}</b>")
+        result.append(f"   ⭐ Achko: {achko} | O' {o} | G' {g} | D {d} | M {m} | ⚽ {gol}")
+        result.append("")
+    
+    return "\n".join(result)
+
+def format_table_old():
+    """Eski matnli jadval (backup)"""
     rows = get_sorted_ranking()
     if not rows:
         return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
@@ -536,316 +620,6 @@ def apply_approved_result(pending_row, approver_id):
     return delta1, delta2
 
 # =========================
-# NEON JADVAL (SIZGA YOQQAN)
-# =========================
-class NeonRankingImageGenerator:
-    def __init__(self, size="telegram"):
-        """Rasm o'lchamlari"""
-        self.sizes = {
-            "4k": (3840, 2160),
-            "2k": (2560, 1440),
-            "hd": (1920, 1080),
-            "telegram": (1280, 720)
-        }
-        self.WIDTH, self.HEIGHT = self.sizes.get(size, self.sizes["telegram"])
-        
-        # Ranglar
-        self.BG_COLOR = (3, 8, 20)
-        self.NEON_BLUE = (0, 180, 255)
-        self.NEON_GOLD = (255, 196, 0)
-        self.NEON_SILVER = (220, 220, 220)
-        self.NEON_BRONZE = (205, 127, 50)
-        self.WHITE = (255, 255, 255)
-        
-        # Shriftlarni yuklash
-        self.fonts = self._load_fonts()
-    
-    def _load_fonts(self):
-        """Shriftlarni topish va yuklash"""
-        font_paths = {
-            "bold": [
-                "arialbd.ttf",
-                "C:/Windows/Fonts/arialbd.ttf",
-                "/System/Library/Fonts/Arial Bold.ttf",
-                "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
-            ],
-            "regular": [
-                "arial.ttf",
-                "C:/Windows/Fonts/arial.ttf",
-                "/System/Library/Fonts/Arial.ttf",
-                "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
-            ]
-        }
-        
-        fonts = {}
-        for name, paths in font_paths.items():
-            found = False
-            for path in paths:
-                try:
-                    if os.path.exists(path):
-                        fonts[name] = path
-                        found = True
-                        break
-                except:
-                    continue
-            if not found:
-                fonts[name] = None
-                logger.warning(f"⚠️ {name} shrift topilmadi")
-        
-        return fonts
-    
-    def _get_font(self, font_type, size):
-        """Shrift obyektini olish"""
-        try:
-            if self.fonts.get(font_type) and os.path.exists(self.fonts[font_type]):
-                return ImageFont.truetype(self.fonts[font_type], size)
-            else:
-                return ImageFont.load_default()
-        except:
-            return ImageFont.load_default()
-    
-    def draw_glow_text(self, base, pos, text, font_size, color, centered=False):
-        """Glow effektli matn chizish"""
-        font = self._get_font("bold", font_size)
-        
-        if centered:
-            try:
-                bbox = font.getbbox(text)
-                text_width = bbox[2] - bbox[0]
-                pos = (pos[0] - text_width // 2, pos[1])
-            except:
-                pass
-        
-        # Glow qatlami
-        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
-        gdraw = ImageDraw.Draw(glow)
-        
-        for r in [20, 12, 6]:
-            gdraw.text(pos, text, font=font, fill=color + (60,))
-            glow = glow.filter(ImageFilter.GaussianBlur(r))
-        
-        base.alpha_composite(glow)
-        
-        draw = ImageDraw.Draw(base)
-        draw.text(pos, text, font=font, fill=color + (255,))
-    
-    def draw_glow_line(self, base, xy, color):
-        """Glow effektli chiziq"""
-        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
-        gdraw = ImageDraw.Draw(glow)
-        
-        gdraw.line(xy, fill=color + (255,), width=3)
-        
-        for blur in [20, 12, 6]:
-            glow = glow.filter(ImageFilter.GaussianBlur(blur))
-        
-        base.alpha_composite(glow)
-        
-        draw = ImageDraw.Draw(base)
-        draw.line(xy, fill=color + (255,), width=2)
-    
-    def generate(self, rows: List[Dict]) -> Optional[str]:
-        """Neon jadval rasm yaratish"""
-        if not rows:
-            return self._generate_empty()
-        
-        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
-        draw = ImageDraw.Draw(img)
-        
-        # Fon gradienti
-        for y in range(self.HEIGHT):
-            c = int(10 + (y / self.HEIGHT) * 30)
-            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
-        
-        # Sarlavha
-        title_size = min(120, int(self.WIDTH / 15))
-        self.draw_glow_text(
-            img,
-            (self.WIDTH // 2, int(self.HEIGHT * 0.05)),
-            "⚽ EFOOTBALL PC REYTING",
-            title_size,
-            self.NEON_BLUE,
-            centered=True
-        )
-        
-        # Jadval chegarasi
-        margin = int(self.WIDTH * 0.03)
-        top_margin = int(self.HEIGHT * 0.15)
-        bottom_margin = int(self.HEIGHT * 0.05)
-        
-        # Asosiy ramka
-        frame = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        fdraw = ImageDraw.Draw(frame)
-        fdraw.rounded_rectangle(
-            (margin, top_margin, self.WIDTH - margin, self.HEIGHT - bottom_margin),
-            radius=min(25, int(self.WIDTH * 0.01)),
-            outline=self.NEON_BLUE + (255,),
-            width=3
-        )
-        
-        for blur in [30, 15, 8]:
-            frame = frame.filter(ImageFilter.GaussianBlur(blur))
-        img.alpha_composite(frame)
-        
-        # Sarlavha ostidagi chiziq
-        line_y = top_margin + int(self.HEIGHT * 0.06)
-        self.draw_glow_line(
-            img,
-            (margin + 20, line_y, self.WIDTH - margin - 20, line_y),
-            self.NEON_BLUE
-        )
-        
-        # Sarlavhalar
-        headers = [
-            ("№", int(self.WIDTH * 0.04)),
-            ("O'YINCHI", int(self.WIDTH * 0.18)),
-            ("O'", int(self.WIDTH * 0.05)),
-            ("G'", int(self.WIDTH * 0.05)),
-            ("D", int(self.WIDTH * 0.05)),
-            ("M", int(self.WIDTH * 0.05)),
-            ("GOL", int(self.WIDTH * 0.09)),
-            ("ACHKO", int(self.WIDTH * 0.12)),
-        ]
-        
-        header_y = top_margin + int(self.HEIGHT * 0.09)
-        x = margin + int(self.WIDTH * 0.02)
-        
-        for title, width in headers:
-            self.draw_glow_text(
-                img,
-                (x, header_y),
-                title,
-                int(self.WIDTH * 0.04),
-                self.NEON_BLUE
-            )
-            x += width
-        
-        # Ma'lumotlar
-        row_y = top_margin + int(self.HEIGHT * 0.16)
-        row_height = int(self.HEIGHT * 0.075)
-        max_rows = min(20, len(rows))
-        
-        medals = {
-            1: ("🥇", self.NEON_GOLD),
-            2: ("🥈", self.NEON_SILVER),
-            3: ("🥉", self.NEON_BRONZE)
-        }
-        
-        for idx in range(max_rows):
-            row = rows[idx]
-            pos = idx + 1
-            
-            # Satr oralig'i
-            if pos > 1:
-                self.draw_glow_line(
-                    img,
-                    (margin + 20, row_y - 10, self.WIDTH - margin - 20, row_y - 10),
-                    (40, 80, 150)
-                )
-            
-            if pos in medals:
-                rank_text, rank_color = medals[pos]
-            else:
-                rank_text = str(pos)
-                rank_color = self.WHITE
-            
-            values = [
-                rank_text,
-                row["Ism"],
-                str(row["Oyinlar"]),
-                str(row["Galaba"]),
-                str(row["Durang"]),
-                str(row["Maglubiyat"]),
-                f"{row['UrganGoli']}-{row['OtkazganGoli']}",
-                f"{float(row['Achko']):.0f}"
-            ]
-            
-            colors = [
-                rank_color,
-                self.WHITE,
-                self.WHITE,
-                self.WHITE,
-                self.WHITE,
-                self.WHITE,
-                self.NEON_BLUE,
-                self.NEON_GOLD
-            ]
-            
-            x = margin + int(self.WIDTH * 0.02)
-            font_size = int(self.WIDTH * 0.035)
-            
-            for i, value in enumerate(values):
-                if i == 1 and len(value) > 20:
-                    value = value[:18] + "..."
-                
-                self.draw_glow_text(
-                    img,
-                    (x, row_y),
-                    str(value),
-                    font_size,
-                    colors[i]
-                )
-                x += headers[i][1]
-            
-            row_y += row_height
-        
-        # Pastki qismdagi sana
-        date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-        self.draw_glow_text(
-            img,
-            (self.WIDTH - margin - int(self.WIDTH * 0.15), self.HEIGHT - int(self.HEIGHT * 0.02)),
-            f"📅 {date_str}",
-            int(self.WIDTH * 0.025),
-            (100, 150, 200)
-        )
-        
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name, quality=85, optimize=True)
-                logger.info(f"✅ Neon jadval rasmi yaratildi: {tmp.name}")
-                return tmp.name
-        except Exception as e:
-            logger.error(f"❌ Rasm saqlashda xatolik: {e}")
-            return None
-    
-    def _generate_empty(self) -> Optional[str]:
-        """Bo'sh jadval rasmi"""
-        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
-        draw = ImageDraw.Draw(img)
-        
-        for y in range(self.HEIGHT):
-            c = int(10 + (y / self.HEIGHT) * 30)
-            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
-        
-        self.draw_glow_text(
-            img,
-            (self.WIDTH // 2, self.HEIGHT // 2 - 50),
-            "📊 REYTING YO'Q",
-            int(self.WIDTH * 0.06),
-            self.NEON_BLUE,
-            centered=True
-        )
-        
-        self.draw_glow_text(
-            img,
-            (self.WIDTH // 2, self.HEIGHT // 2 + 50),
-            "Hali hech qanday o'yin o'tkazilmagan",
-            int(self.WIDTH * 0.03),
-            (100, 150, 200),
-            centered=True
-        )
-        
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name, quality=85, optimize=True)
-                return tmp.name
-        except Exception as e:
-            logger.error(f"❌ Bo'sh rasm saqlashda xatolik: {e}")
-            return None
-
-# =========================
 # KOMANDALAR
 # =========================
 def set_bot_commands(bot_obj):
@@ -882,46 +656,32 @@ def help_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 def table_cmd(update: Update, context: CallbackContext):
-    """Neon jadvalni rasm sifatida yuborish"""
+    """Chiroyli matnli jadval yuborish"""
     try:
-        rows = get_cached_ranking()
-        
-        # Neon jadval yaratish
-        generator = NeonRankingImageGenerator("telegram")
-        image_path = generator.generate(rows)
-        
-        if image_path and os.path.exists(image_path):
-            with open(image_path, 'rb') as f:
-                update.message.reply_photo(
-                    photo=f,
-                    caption="📊 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
-                           "📅 Yangilangan sana: " + datetime.now().strftime("%d.%m.%Y %H:%M"),
-                    parse_mode="HTML",
-                    reply_markup=get_reply_menu()
-                )
-            try:
-                os.unlink(image_path)
-            except:
-                pass
-            logger.info(f"✅ Neon jadval rasmi yuborildi: {update.effective_user.full_name}")
-        else:
-            update.message.reply_text(
-                format_table(),
-                parse_mode="HTML",
-                reply_markup=get_reply_menu()
-            )
-            logger.warning("⚠️ Rasm yaratilmadi, matnli versiya yuborildi")
-            
+        text = format_beautiful_table()
+        update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
+        logger.info(f"✅ Jadval yuborildi: {update.effective_user.full_name}")
     except Exception as e:
-        logger.error(f"❌ Jadval rasmini yuborishda xatolik: {e}")
+        logger.error(f"❌ Jadval yuborishda xatolik: {e}")
         update.message.reply_text(
-            format_table(),
+            format_table_old(),
             parse_mode="HTML",
             reply_markup=get_reply_menu()
         )
 
 def top3_cmd(update: Update, context: CallbackContext):
-    update.message.reply_text(format_top3(), parse_mode="HTML", reply_markup=get_reply_menu())
+    """Chiroyli Top 3 yuborish"""
+    try:
+        text = format_beautiful_top3()
+        update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
+        logger.info(f"✅ Top3 yuborildi: {update.effective_user.full_name}")
+    except Exception as e:
+        logger.error(f"❌ Top3 yuborishda xatolik: {e}")
+        update.message.reply_text(
+            format_top3(),
+            parse_mode="HTML",
+            reply_markup=get_reply_menu()
+        )
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
@@ -1110,6 +870,7 @@ def health():
 
 @app.route("/webapp", methods=["GET"])
 def webapp():
+    """WebApp - bu yerda jadval o'zgarmaydi"""
     rows = get_cached_ranking()
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
