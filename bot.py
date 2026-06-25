@@ -324,14 +324,14 @@ def get_sorted_ranking():
 def format_top_banner(rows):
     if not rows:
         return (
-            "🏆 <b>FIFA 07 REYTING BOT</b>\n\n"
+            "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
             "👑 <b>Chempion:</b> Hali yo‘q\n"
             "⭐ <b>Achko:</b> -"
         )
 
     top = rows[0]
     return (
-        "🏆 <b>FIFA 07 REYTING BOT</b>\n\n"
+        "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
         f"👑 <b>Chempion:</b> {esc(top['Ism'])}\n"
         f"⭐ <b>Achko:</b> {safe_float(top['Achko']):.2f}\n"
         f"🎮 <b>O‘yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
@@ -401,15 +401,15 @@ def format_menu_text():
     return (
         "📋 <b>Bot menyusi</b>\n\n"
         "Natija yuborish:\n"
-        "<code>Nodir 3-2 Shaxzod</code>\n\n"
+        "<code>Ali 3-2 Vali</code>\n\n"
         "Komandalar:\n"
         "/start - Boshlash\n"
         "/menu - Menyu\n"
         "/table - To‘liq jadval\n"
         "/top3 - Top 3\n"
         "/pending - Kutilayotgan natijalar\n"
-        "/reset - Reytingni tozalash (Direktor)\n"
-        "/restart - Botni qayta ishga tushirish (Direktor)\n"
+        "/reset - Reytingni tozalash (Admin)\n"
+        "/restart - Botni qayta ishga tushirish (Admin)\n"
         "/help - Qoidalar"
     )
 
@@ -419,7 +419,7 @@ def format_help_text():
         "ℹ️ <b>Qoidalar</b>\n\n"
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
-        "3) Tasdiqlash faqat <b>Direktor</b> tomonidan bo‘ladi.\n"
+        "3) Tasdiqlash faqat <b>Admin</b> tomonidan bo‘ladi.\n"
         "4) Achko ELOga o‘xshash hisoblanadi.\n"
         "5) To‘g‘ri format:\n"
         "<code>Ali 4-3 Vali</code>"
@@ -518,7 +518,7 @@ def start(update: Update, context: CallbackContext):
     text = format_top_banner(rows) + "\n\n" + (
         "👋 <b>eFootball Reyting botiga xush kelibsiz!</b>\n\n"
         "Natija yuborish formati:\n"
-        "<code>Nodir 3-2 Shaxzod</code>"
+        "<code>Ali 3-2 Vali</code>"
     )
     update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
 
@@ -684,7 +684,7 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         "⏳ <b>Natija qabul qilindi</b>\n\n"
         f"🆔 <b>{esc(pending_id)}</b>\n"
         f"{esc(p1)} {s1}-{s2} {esc(p2)}\n\n"
-        "Direktor tasdiqlashi kutilmoqda.",
+        "Admin tasdiqlashi kutilmoqda.",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
