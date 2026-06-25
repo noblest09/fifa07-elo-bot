@@ -362,60 +362,26 @@ def format_table():
     if not rows:
         return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
 
-    title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
-    # Ustun kengliklari
-    col_num  = 4
-    col_name = 12
-    col_o    = 3
-    col_g    = 3
-    col_d    = 3
-    col_m    = 3
-    col_gol  = 7
-    col_ach  = 8
-
-    # Box-drawing chegaralar
-    def row_line(n, na, o, g, d, m, gl, ac):
-        return f"│{n:^{col_num}}│{na:<{col_name}}│{o:^{col_o}}│{g:^{col_g}}│{d:^{col_d}}│{m:^{col_m}}│{gl:^{col_gol}}│{ac:^{col_ach}}│"
-
-    top    = f"┌{'─'*col_num}┬{'─'*col_name}┬{'─'*col_o}┬{'─'*col_g}┬{'─'*col_d}┬{'─'*col_m}┬{'─'*col_gol}┬{'─'*col_ach}┐"
-    mid    = f"├{'─'*col_num}┼{'─'*col_name}┼{'─'*col_o}┼{'─'*col_g}┼{'─'*col_d}┼{'─'*col_m}┼{'─'*col_gol}┼{'─'*col_ach}┤"
-    bottom = f"└{'─'*col_num}┴{'─'*col_name}┴{'─'*col_o}┴{'─'*col_g}┴{'─'*col_d}┴{'─'*col_m}┴{'─'*col_gol}┴{'─'*col_ach}┘"
-
-    h_num  = "№"
-    h_nam  = " O'yinchi"
-    h_o    = "O'"
-    h_g    = "G'"
-    h_d    = "D"
-    h_m    = "M"
-    h_gol  = "Gol"
-    h_ach  = "Achko"
-
-    table_lines = [
-        top,
-        row_line(h_num, h_nam, h_o, h_g, h_d, h_m, h_gol, h_ach),
-        mid,
-    ]
+    lines = ["🏆 <b>EFOOTBALL PC REYTING JADVALI</b>", ""]
 
     for i, row in enumerate(rows, start=1):
-        num_str = f"{i}."
-        name = " " + str(row["Ism"])
-        if len(name) > col_name:
-            name = name[:col_name - 1] + "."
+        medal = medals.get(i, f"{i}.")
+        name  = esc(str(row["Ism"]))
+        achko = safe_float(row["Achko"])
+        o     = row["Oyinlar"]
+        g     = row["Galaba"]
+        d     = row["Durang"]
+        m     = row["Maglubiyat"]
+        gol   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
 
-        gol_str   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
-        achko_str = f"{safe_float(row['Achko']):.2f}"
-
-        table_lines.append(
-            row_line(num_str, name,
-                     str(row["Oyinlar"]), str(row["Galaba"]),
-                     str(row["Durang"]),  str(row["Maglubiyat"]),
-                     gol_str, achko_str)
+        lines.append(
+            f"{medal} <b>{name}</b> — ⭐ <b>{achko:.2f}</b>\n"
+            f"    🎮 {o}  ✅ {g}  🤝 {d}  ❌ {m}  ⚽ {gol}"
         )
 
-    table_lines.append(bottom)
-    table_str = "\n".join(table_lines)
-    return f"{title}<pre>{table_str}</pre>"
+    return "\n".join(lines)
 
 
 def format_menu_text():
