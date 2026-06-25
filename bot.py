@@ -365,57 +365,61 @@ def format_table():
 
     title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
 
-    col_num  = 4
-    col_name = 12
-    col_o    = 3
-    col_g    = 3
-    col_d    = 3
-    col_m    = 3
-    col_gol  = 7
-    col_ach  = 8
-
-    def row_line(n, na, o, g, d, m, gl, ac):
-        return (
-            f"\u2502{n:^{col_num}}"
-            f"\u2502{na:<{col_name}}"
-            f"\u2502{o:^{col_o}}"
-            f"\u2502{g:^{col_g}}"
-            f"\u2502{d:^{col_d}}"
-            f"\u2502{m:^{col_m}}"
-            f"\u2502{gl:^{col_gol}}"
-            f"\u2502{ac:^{col_ach}}\u2502"
-        )
+    # Ustun kengliklari (telefon uchun qisqa)
+    col_n   = 4   # №
+    col_nm  = 10  # Ism
+    col_o   = 2   # O'
+    col_g   = 2   # G'
+    col_d   = 2   # D
+    col_m   = 2   # M
+    col_gl  = 6   # Gol
+    col_ac  = 7   # Achko
 
     h = "\u2500"
-    top    = "\u250c" + h*col_num + "\u252c" + h*col_name + "\u252c" + h*col_o + "\u252c" + h*col_g + "\u252c" + h*col_d + "\u252c" + h*col_m + "\u252c" + h*col_gol + "\u252c" + h*col_ach + "\u2510"
-    mid    = "\u251c" + h*col_num + "\u253c" + h*col_name + "\u253c" + h*col_o + "\u253c" + h*col_g + "\u253c" + h*col_d + "\u253c" + h*col_m + "\u253c" + h*col_gol + "\u253c" + h*col_ach + "\u2524"
-    bottom = "\u2514" + h*col_num + "\u2534" + h*col_name + "\u2534" + h*col_o + "\u2534" + h*col_g + "\u2534" + h*col_d + "\u2534" + h*col_m + "\u2534" + h*col_gol + "\u2534" + h*col_ach + "\u2518"
+    vl = "\u2502"
 
-    table_lines = [
-        top,
-        row_line(" No ", " O'yinchi   ", "O' ", "G' ", " D ", " M ", "  Gol  ", " Achko  "),
-        mid,
-    ]
+    def make_border(l, m, r):
+        segs = [h*col_n, h*col_nm, h*col_o, h*col_g, h*col_d, h*col_m, h*col_gl, h*col_ac]
+        return l + m.join(segs) + r
 
-    for i, row in enumerate(rows, start=1):
-        num_str   = f"{i}."
-        name      = " " + str(row["Ism"])
-        if len(name) > col_name:
-            name = name[:col_name - 1] + "."
-        gol_str   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
-        achko_str = f"{safe_float(row['Achko']):.2f}"
+    top    = make_border("\u250c", "\u252c", "\u2510")
+    mid    = make_border("\u251c", "\u253c", "\u2524")
+    bottom = make_border("\u2514", "\u2534", "\u2518")
 
-        table_lines.append(
-            row_line(num_str, name,
-                     str(row["Oyinlar"]), str(row["Galaba"]),
-                     str(row["Durang"]),  str(row["Maglubiyat"]),
-                     gol_str, achko_str)
+    def row(n, nm, o, g, d, m, gl, ac):
+        return (
+            f"{vl}{n:^{col_n}}{vl}{nm:<{col_nm}}"
+            f"{vl}{o:^{col_o}}{vl}{g:^{col_g}}"
+            f"{vl}{d:^{col_d}}{vl}{m:^{col_m}}"
+            f"{vl}{gl:^{col_gl}}{vl}{ac:^{col_ac}}{vl}"
         )
 
-    table_lines.append(bottom)
-    return f"{title}<pre>{chr(10).join(table_lines)}</pre>"
+    h_n  = "\u2116"
+    h_nm = "Ism"
+    h_o  = "O"
+    h_g  = "G"
+    h_d  = "D"
+    h_m  = "M"
+    h_gl = "Gol"
+    h_ac = "Achko"
 
+    lines = [top, row(h_n, h_nm, h_o, h_g, h_d, h_m, h_gl, h_ac), mid]
 
+    for i, r in enumerate(rows, start=1):
+        nm = str(r["Ism"])
+        if len(nm) > col_nm:
+            nm = nm[:col_nm-1] + "."
+        gl  = f"{r['UrganGoli']}-{r['OtkazganGoli']}"
+        ac  = f"{safe_float(r['Achko']):.1f}"
+        lines.append(row(
+            f"{i}.", nm,
+            str(r["Oyinlar"]), str(r["Galaba"]),
+            str(r["Durang"]),  str(r["Maglubiyat"]),
+            gl, ac
+        ))
+
+    lines.append(bottom)
+    return title + "<pre>" + "\n".join(lines) + "</pre>"
 def format_menu_text():
     return (
         "📋 <b>Bot menyusi</b>\n\n"
@@ -551,15 +555,7 @@ def help_cmd(update: Update, context: CallbackContext):
 
 
 def table_cmd(update: Update, context: CallbackContext):
-    webapp_url = f"{BASE_URL}/webapp"
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            "📊 Jadvalni ochish",
-            web_app=WebAppInfo(url=webapp_url)
-        )]
-    ])
-    msg = "📊 <b>Reyting jadvali</b>\n\nQuyidagi tugmani bosing:"
-    update.message.reply_text(msg, parse_mode="HTML", reply_markup=keyboard)
+    update.message.reply_text(format_table(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 
 def top3_cmd(update: Update, context: CallbackContext):
