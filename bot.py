@@ -396,33 +396,32 @@ def format_top3():
     return "\n".join(lines)
 
 # =========================
-# CHIROYLI MATNLI JADVAL - TELEFON UCHUN
+# CHIROYLI MATNLI JADVAL
 # =========================
 def format_beautiful_table():
-    """Telefonda ham chiroyli ko'rinadigan jadval"""
+    """Telefonda chiroyli ko'rinadigan jadval - monospace shriftda"""
     rows = get_sorted_ranking()
     
     if not rows:
         return "🏆 <b>EFOOTBALL PC REYTING</b>\n\n📊 Hali reytingda o'yinchi yo'q."
     
-    # Sarlavha
-    result = []
-    result.append("🏆 <b>EFOOTBALL PC REYTING</b>")
-    result.append("")
+    # Jadval qatorlari
+    lines = []
     
-    # Jadvalni code blokida yuborish uchun
-    table_lines = []
+    # Sarlavha
+    lines.append("🏆 EFOOTBALL PC REYTING")
+    lines.append("")
     
     # Yuqori chegara
-    table_lines.append("┌────┬──────────────────┬─────┬─────┬─────┬─────┬─────────┬─────────┐")
-    table_lines.append("│ N° │ O'YINCHI         │  O' │  G' │  D  │  M  │   GOL   │  ACHKO  │")
-    table_lines.append("├────┼──────────────────┼─────┼─────┼─────┼─────┼─────────┼─────────┤")
+    lines.append("┌────┬──────────────────┬─────┬─────┬─────┬─────┬─────────┬─────────┐")
+    lines.append("│ N° │ O'YINCHI         │  O' │  G' │  D  │  M  │   GOL   │  ACHKO  │")
+    lines.append("├────┼──────────────────┼─────┼─────┼─────┼─────┼─────────┼─────────┤")
     
     # Ma'lumotlar
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     
     for i, row in enumerate(rows[:15], start=1):
-        # Ismni qisqartirish (16 belgigacha)
+        # Ismni qisqartirish
         name = str(row["Ism"])
         if len(name) > 16:
             name = name[:14] + ".."
@@ -441,29 +440,26 @@ def format_beautiful_table():
         gol = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
         achko = f"{float(row['Achko']):.0f}"
         
-        # Ismni o'ngga tekislash
+        # Ismni chapga tekislash
         name_padded = name.ljust(16)
         
-        table_lines.append(
+        lines.append(
             f"│ {num} │ {name_padded} │  {o} │  {g} │  {d} │  {m} │  {gol:5} │ {achko:5} │"
         )
     
     # Pastki chegara
-    table_lines.append("└────┴──────────────────┴─────┴─────┴─────┴─────┴─────────┴─────────┘")
+    lines.append("└────┴──────────────────┴─────┴─────┴─────┴─────┴─────────┴─────────┘")
     
-    # Sana va vaqt
-    table_lines.append("")
-    table_lines.append(f"📅 Yangilangan: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
-    table_lines.append("")
-    table_lines.append("📊 <b>EFOOTBALL PC</b>")
+    # Sana
+    lines.append("")
+    lines.append(f"📅 Yangilangan: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    lines.append("")
+    lines.append("📊 EFOOTBALL PC")
     
-    # Code blokida yuborish (monospace shrift)
-    table_text = "\n".join(table_lines)
+    # Code blokida yuborish
+    table_text = "\n".join(lines)
     
-    # HTML bilan yuborish
-    result.append(f"<pre>{table_text}</pre>")
-    
-    return "\n".join(result)
+    return f"<pre>{table_text}</pre>"
 
 def format_table_old():
     """Eski matnli jadval (backup)"""
@@ -638,7 +634,7 @@ def help_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 def table_cmd(update: Update, context: CallbackContext):
-    """Chiroyli matnli jadval yuborish - telefon uchun optimallashtirilgan"""
+    """Chiroyli matnli jadval yuborish - telefon uchun"""
     try:
         text = format_beautiful_table()
         update.message.reply_text(
