@@ -360,9 +360,9 @@ def format_top3():
 def format_table():
     rows = get_sorted_ranking()
     if not rows:
-        return "🏆 <b>FIFA 07 REYTING JADVALI</b>\n\nHali reytingda o‘yinchi yo‘q."
+        return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o‘yinchi yo‘q."
 
-    lines = ["🏆 <b>FIFA 07 REYTING JADVALI</b>", ""]
+    lines = ["🏆 <b>EFOOTBALL PC REYTING JADVALI</b>", ""]
 
     top = rows[0]
     lines.append("━━━━━━━━━━━━━━━━━━━━")
@@ -516,7 +516,7 @@ def set_bot_commands(bot_obj):
 def start(update: Update, context: CallbackContext):
     rows = get_sorted_ranking()
     text = format_top_banner(rows) + "\n\n" + (
-        "👋 <b>FIFA 07 Reyting botiga xush kelibsiz!</b>\n\n"
+        "👋 <b>eFootball Reyting botiga xush kelibsiz!</b>\n\n"
         "Natija yuborish formati:\n"
         "<code>Nodir 3-2 Shaxzod</code>"
     )
@@ -541,7 +541,7 @@ def top3_cmd(update: Update, context: CallbackContext):
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
-        update.message.reply_text("⛔ Bu bo‘lim faqat Direktor uchun.")
+        update.message.reply_text("⛔ Bu bo‘lim faqat admin uchun.")
         return
 
     rows = [row for _, row in pending_records() if str(row["Status"]).upper() == "PENDING"]
@@ -560,7 +560,7 @@ def pending_cmd(update: Update, context: CallbackContext):
 
 def reset_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
-        update.message.reply_text("⛔ /reset faqat Direktor uchun.")
+        update.message.reply_text("⛔ /reset faqat admin uchun.")
         return
 
     ranking_ws.clear()
@@ -576,7 +576,7 @@ def reset_cmd(update: Update, context: CallbackContext):
 
 def restart_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
-        update.message.reply_text("⛔ /restart faqat Direktor uchun.")
+        update.message.reply_text("⛔ /restart faqat admin uchun.")
         return
 
     update.message.reply_text("🔄 Bot qayta ishga tushirilmoqda...")
@@ -596,7 +596,7 @@ def handle_buttons(update: Update, context: CallbackContext):
         action, pending_id = data.split(":", 1)
 
         if not is_director(user.id):
-            query.answer("Faqat Direktor tasdiqlay oladi.", show_alert=True)
+            query.answer("Faqat admin tasdiqlay oladi.", show_alert=True)
             return
 
         _, row = find_pending_row(pending_id)
@@ -617,7 +617,7 @@ def handle_buttons(update: Update, context: CallbackContext):
         if action == "approve":
             delta1, delta2 = apply_approved_result(row, user.id)
             query.edit_message_text(
-                f"✅ <b>Direktor tasdiqladi</b>\n\n"
+                f"✅ <b>Admin tasdiqladi</b>\n\n"
                 f"{p1} {s1}-{s2} {p2}\n\n"
                 f"⭐ {p1}: {delta1:+.2f}\n"
                 f"⭐ {p2}: {delta2:+.2f}",
@@ -632,7 +632,7 @@ def handle_buttons(update: Update, context: CallbackContext):
         elif action == "reject":
             set_pending_status(pending_id, "REJECTED")
             query.edit_message_text(
-                f"❌ <b>Direktor rad etdi</b>\n\n{p1} {s1}-{s2} {p2}",
+                f"❌ <b>Admin rad etdi</b>\n\n{p1} {s1}-{s2} {p2}",
                 parse_mode="HTML",
             )
 
@@ -710,7 +710,7 @@ app = Flask(__name__)
 
 @app.route("/", methods=["GET"])
 def health():
-    return "FIFA 07 bot webhook is running", 200
+    return "EFOOTBALL PC bot webhook is running", 200
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
