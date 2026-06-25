@@ -362,26 +362,57 @@ def format_table():
     if not rows:
         return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
 
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
 
-    lines = ["🏆 <b>EFOOTBALL PC REYTING JADVALI</b>", ""]
+    col_num  = 4
+    col_name = 12
+    col_o    = 3
+    col_g    = 3
+    col_d    = 3
+    col_m    = 3
+    col_gol  = 7
+    col_ach  = 8
 
-    for i, row in enumerate(rows, start=1):
-        medal = medals.get(i, f"{i}.")
-        name  = esc(str(row["Ism"]))
-        achko = safe_float(row["Achko"])
-        o     = row["Oyinlar"]
-        g     = row["Galaba"]
-        d     = row["Durang"]
-        m     = row["Maglubiyat"]
-        gol   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
-
-        lines.append(
-            f"{medal} <b>{name}</b> — ⭐ <b>{achko:.2f}</b>\n"
-            f"    🎮 {o}  ✅ {g}  🤝 {d}  ❌ {m}  ⚽ {gol}"
+    def row_line(n, na, o, g, d, m, gl, ac):
+        return (
+            f"\u2502{n:^{col_num}}"
+            f"\u2502{na:<{col_name}}"
+            f"\u2502{o:^{col_o}}"
+            f"\u2502{g:^{col_g}}"
+            f"\u2502{d:^{col_d}}"
+            f"\u2502{m:^{col_m}}"
+            f"\u2502{gl:^{col_gol}}"
+            f"\u2502{ac:^{col_ach}}\u2502"
         )
 
-    return "\n".join(lines)
+    h = "\u2500"
+    top    = "\u250c" + h*col_num + "\u252c" + h*col_name + "\u252c" + h*col_o + "\u252c" + h*col_g + "\u252c" + h*col_d + "\u252c" + h*col_m + "\u252c" + h*col_gol + "\u252c" + h*col_ach + "\u2510"
+    mid    = "\u251c" + h*col_num + "\u253c" + h*col_name + "\u253c" + h*col_o + "\u253c" + h*col_g + "\u253c" + h*col_d + "\u253c" + h*col_m + "\u253c" + h*col_gol + "\u253c" + h*col_ach + "\u2524"
+    bottom = "\u2514" + h*col_num + "\u2534" + h*col_name + "\u2534" + h*col_o + "\u2534" + h*col_g + "\u2534" + h*col_d + "\u2534" + h*col_m + "\u2534" + h*col_gol + "\u2534" + h*col_ach + "\u2518"
+
+    table_lines = [
+        top,
+        row_line(" No ", " O'yinchi   ", "O' ", "G' ", " D ", " M ", "  Gol  ", " Achko  "),
+        mid,
+    ]
+
+    for i, row in enumerate(rows, start=1):
+        num_str   = f"{i}."
+        name      = " " + str(row["Ism"])
+        if len(name) > col_name:
+            name = name[:col_name - 1] + "."
+        gol_str   = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        achko_str = f"{safe_float(row['Achko']):.2f}"
+
+        table_lines.append(
+            row_line(num_str, name,
+                     str(row["Oyinlar"]), str(row["Galaba"]),
+                     str(row["Durang"]),  str(row["Maglubiyat"]),
+                     gol_str, achko_str)
+        )
+
+    table_lines.append(bottom)
+    return f"{title}<pre>{chr(10).join(table_lines)}</pre>"
 
 
 def format_menu_text():
