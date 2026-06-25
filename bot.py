@@ -536,43 +536,46 @@ def apply_approved_result(pending_row, approver_id):
     return delta1, delta2
 
 # =========================
-# YANGI: ODDIY JADVAL RASMI
+# NEON JADVAL (SIZGA YOQQAN)
 # =========================
-class SimpleRankingImageGenerator:
-    def __init__(self):
-        self.WIDTH = 1200
-        self.HEIGHT = 800
+class NeonRankingImageGenerator:
+    def __init__(self, size="telegram"):
+        """Rasm o'lchamlari"""
+        self.sizes = {
+            "4k": (3840, 2160),
+            "2k": (2560, 1440),
+            "hd": (1920, 1080),
+            "telegram": (1280, 720)
+        }
+        self.WIDTH, self.HEIGHT = self.sizes.get(size, self.sizes["telegram"])
         
         # Ranglar
-        self.BG_COLOR = (255, 255, 255)  # Oq fon
-        self.HEADER_BG = (0, 40, 80)  # To'q ko'k
-        self.TABLE_HEADER = (0, 80, 160)  # Ko'k
-        self.ROW_EVEN = (240, 248, 255)  # Ochiq ko'k
-        self.ROW_ODD = (255, 255, 255)  # Oq
-        self.BORDER_COLOR = (200, 200, 200)
-        self.TEXT_COLOR = (0, 0, 0)
-        self.TEXT_WHITE = (255, 255, 255)
-        self.GOLD = (255, 215, 0)
-        self.SILVER = (192, 192, 192)
-        self.BRONZE = (205, 127, 50)
+        self.BG_COLOR = (3, 8, 20)
+        self.NEON_BLUE = (0, 180, 255)
+        self.NEON_GOLD = (255, 196, 0)
+        self.NEON_SILVER = (220, 220, 220)
+        self.NEON_BRONZE = (205, 127, 50)
+        self.WHITE = (255, 255, 255)
         
-        # Shriftlar
+        # Shriftlarni yuklash
         self.fonts = self._load_fonts()
     
     def _load_fonts(self):
-        """Shriftlarni yuklash"""
+        """Shriftlarni topish va yuklash"""
         font_paths = {
             "bold": [
                 "arialbd.ttf",
                 "C:/Windows/Fonts/arialbd.ttf",
                 "/System/Library/Fonts/Arial Bold.ttf",
                 "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
             ],
             "regular": [
                 "arial.ttf",
                 "C:/Windows/Fonts/arial.ttf",
                 "/System/Library/Fonts/Arial.ttf",
                 "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
             ]
         }
         
@@ -603,113 +606,150 @@ class SimpleRankingImageGenerator:
         except:
             return ImageFont.load_default()
     
+    def draw_glow_text(self, base, pos, text, font_size, color, centered=False):
+        """Glow effektli matn chizish"""
+        font = self._get_font("bold", font_size)
+        
+        if centered:
+            try:
+                bbox = font.getbbox(text)
+                text_width = bbox[2] - bbox[0]
+                pos = (pos[0] - text_width // 2, pos[1])
+            except:
+                pass
+        
+        # Glow qatlami
+        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        
+        for r in [20, 12, 6]:
+            gdraw.text(pos, text, font=font, fill=color + (60,))
+            glow = glow.filter(ImageFilter.GaussianBlur(r))
+        
+        base.alpha_composite(glow)
+        
+        draw = ImageDraw.Draw(base)
+        draw.text(pos, text, font=font, fill=color + (255,))
+    
+    def draw_glow_line(self, base, xy, color):
+        """Glow effektli chiziq"""
+        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        
+        gdraw.line(xy, fill=color + (255,), width=3)
+        
+        for blur in [20, 12, 6]:
+            glow = glow.filter(ImageFilter.GaussianBlur(blur))
+        
+        base.alpha_composite(glow)
+        
+        draw = ImageDraw.Draw(base)
+        draw.line(xy, fill=color + (255,), width=2)
+    
     def generate(self, rows: List[Dict]) -> Optional[str]:
-        """Oddiy jadval rasm yaratish"""
+        """Neon jadval rasm yaratish"""
         if not rows:
             return self._generate_empty()
         
-        # Rasm o'lchamlari
-        margin = 40
-        row_height = 50
-        header_height = 60
-        title_height = 80
-        footer_height = 60
-        
-        # Jadval o'lchamlari
-        cols = [
-            ("№", 60),
-            ("O'yinchi", 250),
-            ("O'", 60),
-            ("G'", 60),
-            ("D", 60),
-            ("M", 60),
-            ("Gol", 120),
-            ("Achko", 120),
-        ]
-        
-        total_width = sum(w for _, w in cols) + margin * 2
-        total_height = title_height + header_height + (len(rows[:15]) * row_height) + footer_height + margin * 2
-        
-        # Rasm yaratish
-        img = Image.new("RGB", (total_width, total_height), self.BG_COLOR)
+        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
         draw = ImageDraw.Draw(img)
         
+        # Fon gradienti
+        for y in range(self.HEIGHT):
+            c = int(10 + (y / self.HEIGHT) * 30)
+            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
+        
         # Sarlavha
-        title_font = self._get_font("bold", 28)
-        title_text = "⚽ EFOOTBALL PC REYTING JADVALI"
-        bbox = draw.textbbox((0, 0), title_text, font=title_font)
-        title_width = bbox[2] - bbox[0]
-        draw.text(
-            ((total_width - title_width) // 2, 20),
-            title_text,
-            font=title_font,
-            fill=(0, 40, 80)
+        title_size = min(120, int(self.WIDTH / 15))
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, int(self.HEIGHT * 0.05)),
+            "⚽ EFOOTBALL PC REYTING",
+            title_size,
+            self.NEON_BLUE,
+            centered=True
         )
         
-        # Jadval boshi
-        y = title_height
+        # Jadval chegarasi
+        margin = int(self.WIDTH * 0.03)
+        top_margin = int(self.HEIGHT * 0.15)
+        bottom_margin = int(self.HEIGHT * 0.05)
         
-        # Jadval fonini chizish
-        draw.rectangle(
-            (margin, y, total_width - margin, y + header_height + (len(rows[:15]) * row_height)),
-            outline=self.BORDER_COLOR,
-            width=2
+        # Asosiy ramka
+        frame = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        fdraw = ImageDraw.Draw(frame)
+        fdraw.rounded_rectangle(
+            (margin, top_margin, self.WIDTH - margin, self.HEIGHT - bottom_margin),
+            radius=min(25, int(self.WIDTH * 0.01)),
+            outline=self.NEON_BLUE + (255,),
+            width=3
         )
         
-        # Sarlavha qatori
-        draw.rectangle(
-            (margin, y, total_width - margin, y + header_height),
-            fill=self.TABLE_HEADER
+        for blur in [30, 15, 8]:
+            frame = frame.filter(ImageFilter.GaussianBlur(blur))
+        img.alpha_composite(frame)
+        
+        # Sarlavha ostidagi chiziq
+        line_y = top_margin + int(self.HEIGHT * 0.06)
+        self.draw_glow_line(
+            img,
+            (margin + 20, line_y, self.WIDTH - margin - 20, line_y),
+            self.NEON_BLUE
         )
         
-        x = margin
-        for title, width in cols:
-            font = self._get_font("bold", 16)
-            bbox = draw.textbbox((0, 0), title, font=font)
-            text_width = bbox[2] - bbox[0]
-            draw.text(
-                (x + (width - text_width) // 2, y + 18),
+        # Sarlavhalar
+        headers = [
+            ("№", int(self.WIDTH * 0.04)),
+            ("O'YINCHI", int(self.WIDTH * 0.18)),
+            ("O'", int(self.WIDTH * 0.05)),
+            ("G'", int(self.WIDTH * 0.05)),
+            ("D", int(self.WIDTH * 0.05)),
+            ("M", int(self.WIDTH * 0.05)),
+            ("GOL", int(self.WIDTH * 0.09)),
+            ("ACHKO", int(self.WIDTH * 0.12)),
+        ]
+        
+        header_y = top_margin + int(self.HEIGHT * 0.09)
+        x = margin + int(self.WIDTH * 0.02)
+        
+        for title, width in headers:
+            self.draw_glow_text(
+                img,
+                (x, header_y),
                 title,
-                font=font,
-                fill=self.TEXT_WHITE
+                int(self.WIDTH * 0.04),
+                self.NEON_BLUE
             )
             x += width
         
-        y += header_height
-        
         # Ma'lumotlar
-        medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-        colors = {1: self.GOLD, 2: self.SILVER, 3: self.BRONZE}
+        row_y = top_margin + int(self.HEIGHT * 0.16)
+        row_height = int(self.HEIGHT * 0.075)
+        max_rows = min(20, len(rows))
         
-        for i, row in enumerate(rows[:15]):
-            pos = i + 1
+        medals = {
+            1: ("🥇", self.NEON_GOLD),
+            2: ("🥈", self.NEON_SILVER),
+            3: ("🥉", self.NEON_BRONZE)
+        }
+        
+        for idx in range(max_rows):
+            row = rows[idx]
+            pos = idx + 1
             
-            # Qator rangi
-            if pos % 2 == 0:
-                draw.rectangle(
-                    (margin, y, total_width - margin, y + row_height),
-                    fill=self.ROW_EVEN
+            # Satr oralig'i
+            if pos > 1:
+                self.draw_glow_line(
+                    img,
+                    (margin + 20, row_y - 10, self.WIDTH - margin - 20, row_y - 10),
+                    (40, 80, 150)
                 )
-            else:
-                draw.rectangle(
-                    (margin, y, total_width - margin, y + row_height),
-                    fill=self.ROW_ODD
-                )
             
-            # Chegara chizig'i
-            draw.line(
-                (margin, y + row_height, total_width - margin, y + row_height),
-                fill=self.BORDER_COLOR,
-                width=1
-            )
-            
-            # Ma'lumotlar
             if pos in medals:
-                rank_text = medals[pos]
-                rank_color = colors[pos]
+                rank_text, rank_color = medals[pos]
             else:
                 rank_text = str(pos)
-                rank_color = self.TEXT_COLOR
+                rank_color = self.WHITE
             
             values = [
                 rank_text,
@@ -722,60 +762,49 @@ class SimpleRankingImageGenerator:
                 f"{float(row['Achko']):.0f}"
             ]
             
-            x = margin
-            font = self._get_font("regular", 14)
+            colors = [
+                rank_color,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.NEON_BLUE,
+                self.NEON_GOLD
+            ]
             
-            for j, value in enumerate(values):
-                bbox = draw.textbbox((0, 0), str(value), font=font)
-                text_width = bbox[2] - bbox[0]
+            x = margin + int(self.WIDTH * 0.02)
+            font_size = int(self.WIDTH * 0.035)
+            
+            for i, value in enumerate(values):
+                if i == 1 and len(value) > 20:
+                    value = value[:18] + "..."
                 
-                # Medal yoki raqam
-                if j == 0:
-                    color = rank_color
-                elif j == 1:
-                    color = self.TEXT_COLOR
-                    font_bold = self._get_font("bold", 14)
-                    bbox = draw.textbbox((0, 0), str(value), font=font_bold)
-                    text_width = bbox[2] - bbox[0]
-                    draw.text(
-                        (x + 5, y + 15),
-                        str(value),
-                        font=font_bold,
-                        fill=color
-                    )
-                    x += cols[j][1]
-                    continue
-                else:
-                    color = self.TEXT_COLOR
-                
-                draw.text(
-                    (x + (cols[j][1] - text_width) // 2, y + 15),
+                self.draw_glow_text(
+                    img,
+                    (x, row_y),
                     str(value),
-                    font=font,
-                    fill=color
+                    font_size,
+                    colors[i]
                 )
-                x += cols[j][1]
+                x += headers[i][1]
             
-            y += row_height
+            row_y += row_height
         
-        # Pastki qism
-        footer_y = y + 10
-        footer_font = self._get_font("bold", 14)
-        footer_text = "EFOOTBALL PC REYTING JADVALI"
-        bbox = draw.textbbox((0, 0), footer_text, font=footer_font)
-        footer_width = bbox[2] - bbox[0]
-        draw.text(
-            ((total_width - footer_width) // 2, footer_y),
-            footer_text,
-            font=footer_font,
-            fill=(0, 80, 160)
+        # Pastki qismdagi sana
+        date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+        self.draw_glow_text(
+            img,
+            (self.WIDTH - margin - int(self.WIDTH * 0.15), self.HEIGHT - int(self.HEIGHT * 0.02)),
+            f"📅 {date_str}",
+            int(self.WIDTH * 0.025),
+            (100, 150, 200)
         )
         
-        # Faylni vaqtinchalik saqlash
         try:
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name, quality=90, optimize=True)
-                logger.info(f"✅ Oddiy jadval rasmi yaratildi: {tmp.name}")
+                img.save(tmp.name, quality=85, optimize=True)
+                logger.info(f"✅ Neon jadval rasmi yaratildi: {tmp.name}")
                 return tmp.name
         except Exception as e:
             logger.error(f"❌ Rasm saqlashda xatolik: {e}")
@@ -783,23 +812,34 @@ class SimpleRankingImageGenerator:
     
     def _generate_empty(self) -> Optional[str]:
         """Bo'sh jadval rasmi"""
-        img = Image.new("RGB", (600, 300), self.BG_COLOR)
+        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
         draw = ImageDraw.Draw(img)
         
-        font = self._get_font("bold", 24)
-        text = "📊 REYTING YO'Q"
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        draw.text(
-            ((600 - text_width) // 2, 130),
-            text,
-            font=font,
-            fill=(0, 80, 160)
+        for y in range(self.HEIGHT):
+            c = int(10 + (y / self.HEIGHT) * 30)
+            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
+        
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, self.HEIGHT // 2 - 50),
+            "📊 REYTING YO'Q",
+            int(self.WIDTH * 0.06),
+            self.NEON_BLUE,
+            centered=True
+        )
+        
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, self.HEIGHT // 2 + 50),
+            "Hali hech qanday o'yin o'tkazilmagan",
+            int(self.WIDTH * 0.03),
+            (100, 150, 200),
+            centered=True
         )
         
         try:
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name, quality=90, optimize=True)
+                img.save(tmp.name, quality=85, optimize=True)
                 return tmp.name
         except Exception as e:
             logger.error(f"❌ Bo'sh rasm saqlashda xatolik: {e}")
@@ -842,12 +882,12 @@ def help_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
 def table_cmd(update: Update, context: CallbackContext):
-    """Siz so'ragan oddiy jadvalni rasm sifatida yuborish"""
+    """Neon jadvalni rasm sifatida yuborish"""
     try:
         rows = get_cached_ranking()
         
-        # Oddiy jadval yaratish
-        generator = SimpleRankingImageGenerator()
+        # Neon jadval yaratish
+        generator = NeonRankingImageGenerator("telegram")
         image_path = generator.generate(rows)
         
         if image_path and os.path.exists(image_path):
@@ -863,9 +903,8 @@ def table_cmd(update: Update, context: CallbackContext):
                 os.unlink(image_path)
             except:
                 pass
-            logger.info(f"✅ Oddiy jadval rasmi yuborildi: {update.effective_user.full_name}")
+            logger.info(f"✅ Neon jadval rasmi yuborildi: {update.effective_user.full_name}")
         else:
-            # Agar rasm yaratilmagan bo'lsa, matnli versiyani yuborish
             update.message.reply_text(
                 format_table(),
                 parse_mode="HTML",
