@@ -2,10 +2,10 @@ import os
 import re
 import uuid
 import html
-from PIL import Image, ImageDraw, ImageFont
-from io import BytesIO
-
+import logging
+import tempfile
 from datetime import datetime
+from typing import List, Dict, Optional, Tuple
 
 from flask import Flask, request
 import gspread
@@ -28,6 +28,19 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
+# PIL uchun importlar
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import sys
+
+# =========================
+# LOGGING SOZLAMALARI
+# =========================
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
 # =========================
 # SOZLAMALAR
 # =========================
@@ -41,9 +54,19 @@ HISTORY_SHEET = "History"
 INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
-TOKEN = os.environ["TELEGRAM_TOKEN"]
-BASE_URL = os.environ["BASE_URL"].rstrip("/")
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+BASE_URL = os.environ.get("BASE_URL", "").rstrip("/")
 PORT = int(os.environ.get("PORT", 10000))
+
+# TOKEN va BASE_URL ni tekshirish
+if not TOKEN or not BASE_URL:
+    raise ValueError("❌ TOKEN yoki BASE_URL topilmadi! Iltimos, muhit o'zgaruvchilarini tekshiring.")
+
+# =========================
+# KESH SOZLAMALARI
+# =========================
+CACHE_TTL = 30  # 30 soniya
+ranking_cache = {"data": None, "timestamp": 0}
 
 # =========================
 # TELEGRAM UPDATER / DISPATCHER
@@ -59,17 +82,21 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-spreadsheet = client.open_by_key(SHEET_ID)
 
+try:
+    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(SHEET_ID)
+    logger.info("✅ Google Sheets ga ulanish muvaffaqiyatli")
+except Exception as e:
+    logger.error(f"❌ Google Sheets ga ulanishda xatolik: {e}")
+    raise
 
 def get_or_create_worksheet(title: str, rows: int = 2000, cols: int = 20):
     try:
         return spreadsheet.worksheet(title)
     except gspread.WorksheetNotFound:
         return spreadsheet.add_worksheet(title=title, rows=str(rows), cols=str(cols))
-
 
 ranking_ws = get_or_create_worksheet(RANKING_SHEET)
 pending_ws = get_or_create_worksheet(PENDING_SHEET)
@@ -94,13 +121,11 @@ HISTORY_HEADERS = [
     "OldRating2", "NewRating2"
 ]
 
-
 def ensure_headers(ws, headers):
     row1 = ws.row_values(1)
     if row1 != headers:
         ws.clear()
         ws.append_row(headers)
-
 
 ensure_headers(ranking_ws, RANKING_HEADERS)
 ensure_headers(pending_ws, PENDING_HEADERS)
@@ -112,10 +137,8 @@ ensure_headers(history_ws, HISTORY_HEADERS)
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 def esc(text: str) -> str:
     return html.escape(str(text))
-
 
 def normalize_name(name: str) -> str:
     name = re.sub(r"\s+", " ", name.strip())
@@ -123,13 +146,11 @@ def normalize_name(name: str) -> str:
         return name
     return " ".join(word[:1].upper() + word[1:].lower() for word in name.split())
 
-
 def safe_int(v, default=0):
     try:
         return int(float(str(v).strip().replace(",", ".")))
     except Exception:
         return default
-
 
 def safe_float(v, default=0.0):
     try:
@@ -140,7 +161,6 @@ def safe_float(v, default=0.0):
     except Exception:
         return default
 
-
 def get_reply_menu():
     return ReplyKeyboardMarkup(
         [
@@ -150,10 +170,8 @@ def get_reply_menu():
         resize_keyboard=True,
     )
 
-
 def is_director(user_id: int) -> bool:
     return user_id == DIRECTOR_ID
-
 
 def parse_score_message(text: str):
     text = text.strip()
@@ -173,28 +191,44 @@ def parse_score_message(text: str):
         return None
     if p1.lower() == p2.lower():
         return None
+    if s1 > 20 or s2 > 20:  # Cheklov
+        return None
+    if len(p1) < 2 or len(p2) < 2:  # Ismlar juda qisqa bo'lmasin
+        return None
 
     return p1, s1, s2, p2
 
-
 def sheet_rows(ws, headers):
-    values = ws.get_all_values()
-    result = []
-    for idx, row in enumerate(values[1:], start=2):
-        row = row + [""] * (len(headers) - len(row))
-        item = dict(zip(headers, row[:len(headers)]))
-        if any(str(v).strip() for v in item.values()):
-            result.append((idx, item))
-    return result
+    try:
+        values = ws.get_all_values()
+        result = []
+        for idx, row in enumerate(values[1:], start=2):
+            row = row + [""] * (len(headers) - len(row))
+            item = dict(zip(headers, row[:len(headers)]))
+            if any(str(v).strip() for v in item.values()):
+                result.append((idx, item))
+        return result
+    except Exception as e:
+        logger.error(f"Sheet o'qishda xatolik: {e}")
+        return []
 
+def get_cached_ranking():
+    """Kesh bilan ranking ma'lumotlarini olish"""
+    global ranking_cache
+    current_time = datetime.now().timestamp()
+    
+    if current_time - ranking_cache["timestamp"] > CACHE_TTL:
+        ranking_cache["data"] = get_sorted_ranking()
+        ranking_cache["timestamp"] = current_time
+        logger.info("🔄 Ranking kesh yangilandi")
+    
+    return ranking_cache["data"]
 
 def ranking_records():
     return sheet_rows(ranking_ws, RANKING_HEADERS)
 
-
 def pending_records():
     return sheet_rows(pending_ws, PENDING_HEADERS)
-
 
 def find_ranking_row(name: str):
     for idx, row in ranking_records():
@@ -202,23 +236,26 @@ def find_ranking_row(name: str):
             return idx, row
     return None, None
 
-
 def create_player_if_missing(name: str):
     row_idx, row = find_ranking_row(name)
     if row_idx:
         return row_idx, row
 
-    ranking_ws.append_row([
-        name, 0, 0, 0, 0, 0, 0, INITIAL_RATING, 0, "-", now_str()
-    ])
+    try:
+        ranking_ws.append_row([
+            name, 0, 0, 0, 0, 0, 0, INITIAL_RATING, 0, "-", now_str()
+        ])
+        logger.info(f"✅ Yangi o'yinchi qo'shildi: {name}")
+    except Exception as e:
+        logger.error(f"O'yinchi qo'shishda xatolik: {e}")
+    
     return find_ranking_row(name)
-
 
 def expected_score(r1: float, r2: float) -> float:
     return 1 / (1 + 10 ** ((r2 - r1) / 400))
 
-
-def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
+def calc_elo_change(r1: float, r2: float, score1: int, score2: int, games1: int = 0, games2: int = 0):
+    """ELO o'zgarishini hisoblash, yangi o'yinchilar uchun K faktor kattaroq"""
     e1 = expected_score(r1, r2)
     e2 = expected_score(r2, r1)
 
@@ -232,8 +269,12 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
     goal_diff = abs(score1 - score2)
     bonus = min(3, max(0, goal_diff - 1))
 
-    delta1 = K_FACTOR * (s1 - e1)
-    delta2 = K_FACTOR * (s2 - e2)
+    # Yangi o'yinchilar uchun K faktor kattaroq
+    k1 = 32.0 if games1 < 10 else K_FACTOR
+    k2 = 32.0 if games2 < 10 else K_FACTOR
+
+    delta1 = k1 * (s1 - e1)
+    delta2 = k2 * (s2 - e2)
 
     if s1 == 1.0:
         delta1 += bonus
@@ -253,7 +294,6 @@ def calc_elo_change(r1: float, r2: float, score1: int, score2: int):
             delta2, delta1 = 2, -2
 
     return round(delta1, 2), round(delta2, 2)
-
 
 def update_player_stats(name: str, goals_for: int, goals_against: int, result: str, delta_rating: float):
     row_idx, row = create_player_if_missing(name)
@@ -280,14 +320,20 @@ def update_player_stats(name: str, goals_for: int, goals_against: int, result: s
         streak = streak - 1 if streak <= 0 else -1
         last_result = "M"
 
-    ranking_ws.update(
-        f"A{row_idx}:K{row_idx}",
-        [[
-            name, games, wins, draws, losses,
-            gf, ga, round(rating, 2), streak, last_result, now_str()
-        ]]
-    )
-
+    try:
+        ranking_ws.update(
+            f"A{row_idx}:K{row_idx}",
+            [[
+                name, games, wins, draws, losses,
+                gf, ga, round(rating, 2), streak, last_result, now_str()
+            ]]
+        )
+        # Keshni tozalash
+        global ranking_cache
+        ranking_cache["data"] = None
+        ranking_cache["timestamp"] = 0
+    except Exception as e:
+        logger.error(f"O'yinchi statistikasini yangilashda xatolik: {e}")
 
 def get_sorted_ranking():
     rows = [row for _, row in ranking_records()]
@@ -323,7 +369,6 @@ def get_sorted_ranking():
     )
     return cleaned
 
-
 def format_top_banner(rows):
     if not rows:
         return (
@@ -341,7 +386,6 @@ def format_top_banner(rows):
         f"⚽ <b>Gollar:</b> {top['UrganGoli']}-{top['OtkazganGoli']}"
     )
 
-
 def format_top3():
     rows = get_sorted_ranking()
     if not rows:
@@ -358,7 +402,6 @@ def format_top3():
         )
 
     return "\n".join(lines)
-
 
 def format_table():
     rows = get_sorted_ranking()
@@ -384,6 +427,7 @@ def format_table():
 
     lines.append(sep)
     return "\n".join(lines)
+
 def format_menu_text():
     return (
         "📋 <b>Bot menyusi</b>\n\n"
@@ -400,7 +444,6 @@ def format_menu_text():
         "/help - Qoidalar"
     )
 
-
 def format_help_text():
     return (
         "ℹ️ <b>Qoidalar</b>\n\n"
@@ -412,23 +455,24 @@ def format_help_text():
         "<code>Ali 4-3 Vali</code>"
     )
 
-
 def add_pending_result(p1, s1, s2, p2, submitted_by_id, submitted_by_name, chat_id, chat_title):
     pending_id = str(uuid.uuid4())[:8]
-    pending_ws.append_row([
-        pending_id, p1, s1, s2, p2,
-        submitted_by_id, submitted_by_name, chat_id, chat_title,
-        "PENDING", now_str(), ""
-    ])
+    try:
+        pending_ws.append_row([
+            pending_id, p1, s1, s2, p2,
+            submitted_by_id, submitted_by_name, chat_id, chat_title,
+            "PENDING", now_str(), ""
+        ])
+        logger.info(f"✅ Yangi pending natija: {pending_id} - {p1} {s1}-{s2} {p2}")
+    except Exception as e:
+        logger.error(f"Pending qo'shishda xatolik: {e}")
     return pending_id
-
 
 def find_pending_row(pending_id: str):
     for idx, row in pending_records():
         if str(row["ID"]).strip() == pending_id:
             return idx, row
     return None, None
-
 
 def set_pending_status(pending_id: str, status: str, message_id=None):
     row_idx, row = find_pending_row(pending_id)
@@ -439,16 +483,20 @@ def set_pending_status(pending_id: str, status: str, message_id=None):
     if message_id is not None:
         approval_message_id = str(message_id)
 
-    pending_ws.update(
-        f"A{row_idx}:L{row_idx}",
-        [[
-            row["ID"], row["Player1"], row["Score1"], row["Score2"], row["Player2"],
-            row["SubmittedByID"], row["SubmittedByName"], row["ChatID"], row["ChatTitle"],
-            status, row["CreatedAt"], approval_message_id
-        ]]
-    )
-    return True
-
+    try:
+        pending_ws.update(
+            f"A{row_idx}:L{row_idx}",
+            [[
+                row["ID"], row["Player1"], row["Score1"], row["Score2"], row["Player2"],
+                row["SubmittedByID"], row["SubmittedByName"], row["ChatID"], row["ChatTitle"],
+                status, row["CreatedAt"], approval_message_id
+            ]]
+        )
+        logger.info(f"✅ Pending status yangilandi: {pending_id} -> {status}")
+        return True
+    except Exception as e:
+        logger.error(f"Pending status yangilashda xatolik: {e}")
+        return False
 
 def apply_approved_result(pending_row, approver_id):
     p1 = normalize_name(str(pending_row["Player1"]))
@@ -461,8 +509,11 @@ def apply_approved_result(pending_row, approver_id):
 
     old1 = safe_float(row1["Achko"], INITIAL_RATING)
     old2 = safe_float(row2["Achko"], INITIAL_RATING)
+    
+    games1 = safe_int(row1["Oyinlar"])
+    games2 = safe_int(row2["Oyinlar"])
 
-    delta1, delta2 = calc_elo_change(old1, old2, s1, s2)
+    delta1, delta2 = calc_elo_change(old1, old2, s1, s2, games1, games2)
 
     if s1 > s2:
         res1, res2 = "W", "L"
@@ -474,14 +525,339 @@ def apply_approved_result(pending_row, approver_id):
     update_player_stats(p1, s1, s2, res1, delta1)
     update_player_stats(p2, s2, s1, res2, delta2)
 
-    history_ws.append_row([
-        pending_row["ID"], p1, s1, s2, p2,
-        pending_row["SubmittedByName"], approver_id, now_str(),
-        delta1, delta2, old1, round(old1 + delta1, 2), old2, round(old2 + delta2, 2)
-    ])
+    try:
+        history_ws.append_row([
+            pending_row["ID"], p1, s1, s2, p2,
+            pending_row["SubmittedByName"], approver_id, now_str(),
+            delta1, delta2, old1, round(old1 + delta1, 2), old2, round(old2 + delta2, 2)
+        ])
+        logger.info(f"✅ History ga qo'shildi: {pending_row['ID']}")
+    except Exception as e:
+        logger.error(f"History ga qo'shishda xatolik: {e}")
 
     set_pending_status(pending_row["ID"], "APPROVED")
     return delta1, delta2
+
+# =========================
+# RASM YARATISH (PIL)
+# =========================
+class RankingImageGenerator:
+    def __init__(self, size="telegram"):
+        """Rasm o'lchamlari"""
+        self.sizes = {
+            "4k": (3840, 2160),
+            "2k": (2560, 1440),
+            "hd": (1920, 1080),
+            "telegram": (1280, 720)
+        }
+        self.WIDTH, self.HEIGHT = self.sizes.get(size, self.sizes["telegram"])
+        
+        # Ranglar
+        self.BG_COLOR = (3, 8, 20)
+        self.NEON_BLUE = (0, 180, 255)
+        self.NEON_GOLD = (255, 196, 0)
+        self.NEON_SILVER = (220, 220, 220)
+        self.NEON_BRONZE = (205, 127, 50)
+        self.WHITE = (255, 255, 255)
+        
+        # Shriftlarni yuklash
+        self.fonts = self._load_fonts()
+    
+    def _load_fonts(self):
+        """Shriftlarni topish va yuklash"""
+        font_paths = {
+            "bold": [
+                "arialbd.ttf",
+                "C:/Windows/Fonts/arialbd.ttf",
+                "/System/Library/Fonts/Arial Bold.ttf",
+                "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
+            ],
+            "regular": [
+                "arial.ttf",
+                "C:/Windows/Fonts/arial.ttf",
+                "/System/Library/Fonts/Arial.ttf",
+                "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+            ]
+        }
+        
+        fonts = {}
+        for name, paths in font_paths.items():
+            found = False
+            for path in paths:
+                try:
+                    if os.path.exists(path):
+                        fonts[name] = path
+                        found = True
+                        break
+                except:
+                    continue
+            if not found:
+                fonts[name] = None
+                logger.warning(f"⚠️ {name} shrift topilmadi")
+        
+        return fonts
+    
+    def _get_font(self, font_type, size):
+        """Shrift obyektini olish"""
+        try:
+            if self.fonts.get(font_type) and os.path.exists(self.fonts[font_type]):
+                return ImageFont.truetype(self.fonts[font_type], size)
+            else:
+                return ImageFont.load_default()
+        except:
+            return ImageFont.load_default()
+    
+    def draw_glow_text(self, base, pos, text, font_size, color, centered=False):
+        """Glow effektli matn chizish"""
+        font = self._get_font("bold", font_size)
+        
+        # Agar markazlashtirish kerak bo'lsa
+        if centered:
+            try:
+                bbox = font.getbbox(text)
+                text_width = bbox[2] - bbox[0]
+                pos = (pos[0] - text_width // 2, pos[1])
+            except:
+                pass
+        
+        # Glow qatlami
+        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        
+        # Bir necha qatlam glow
+        for r in [20, 12, 6]:
+            gdraw.text(pos, text, font=font, fill=color + (60,))
+            glow = glow.filter(ImageFilter.GaussianBlur(r))
+        
+        base.alpha_composite(glow)
+        
+        # Asosiy matn
+        draw = ImageDraw.Draw(base)
+        draw.text(pos, text, font=font, fill=color + (255,))
+    
+    def draw_glow_line(self, base, xy, color):
+        """Glow effektli chiziq"""
+        glow = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        
+        gdraw.line(xy, fill=color + (255,), width=3)
+        
+        for blur in [20, 12, 6]:
+            glow = glow.filter(ImageFilter.GaussianBlur(blur))
+        
+        base.alpha_composite(glow)
+        
+        draw = ImageDraw.Draw(base)
+        draw.line(xy, fill=color + (255,), width=2)
+    
+    def generate(self, rows: List[Dict]) -> Optional[str]:
+        """Rasm yaratish"""
+        if not rows:
+            return self._generate_empty()
+        
+        # Rasm o'lchamlari
+        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
+        draw = ImageDraw.Draw(img)
+        
+        # Fon gradienti
+        for y in range(self.HEIGHT):
+            c = int(10 + (y / self.HEIGHT) * 30)
+            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
+        
+        # Sarlavha
+        title_size = min(120, int(self.WIDTH / 15))
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, int(self.HEIGHT * 0.05)),
+            "⚽ EFOOTBALL PC REYTING",
+            title_size,
+            self.NEON_BLUE,
+            centered=True
+        )
+        
+        # Jadval chegarasi
+        margin = int(self.WIDTH * 0.03)
+        top_margin = int(self.HEIGHT * 0.15)
+        bottom_margin = int(self.HEIGHT * 0.05)
+        
+        # Asosiy ramka
+        frame = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        fdraw = ImageDraw.Draw(frame)
+        fdraw.rounded_rectangle(
+            (margin, top_margin, self.WIDTH - margin, self.HEIGHT - bottom_margin),
+            radius=min(25, int(self.WIDTH * 0.01)),
+            outline=self.NEON_BLUE + (255,),
+            width=3
+        )
+        
+        # Glow effekt
+        for blur in [30, 15, 8]:
+            frame = frame.filter(ImageFilter.GaussianBlur(blur))
+        img.alpha_composite(frame)
+        
+        # Sarlavha ostidagi chiziq
+        line_y = top_margin + int(self.HEIGHT * 0.06)
+        self.draw_glow_line(
+            img,
+            (margin + 20, line_y, self.WIDTH - margin - 20, line_y),
+            self.NEON_BLUE
+        )
+        
+        # Sarlavhalar
+        headers = [
+            ("№", int(self.WIDTH * 0.04)),
+            ("O'YINCHI", int(self.WIDTH * 0.18)),
+            ("O'", int(self.WIDTH * 0.05)),
+            ("G'", int(self.WIDTH * 0.05)),
+            ("D", int(self.WIDTH * 0.05)),
+            ("M", int(self.WIDTH * 0.05)),
+            ("GOL", int(self.WIDTH * 0.09)),
+            ("ACHKO", int(self.WIDTH * 0.12)),
+        ]
+        
+        header_y = top_margin + int(self.HEIGHT * 0.09)
+        x = margin + int(self.WIDTH * 0.02)
+        
+        for title, width in headers:
+            self.draw_glow_text(
+                img,
+                (x, header_y),
+                title,
+                int(self.WIDTH * 0.04),
+                self.NEON_BLUE
+            )
+            x += width
+        
+        # Ma'lumotlar
+        row_y = top_margin + int(self.HEIGHT * 0.16)
+        row_height = int(self.HEIGHT * 0.075)
+        max_rows = min(20, len(rows))
+        
+        medals = {
+            1: ("🥇", self.NEON_GOLD),
+            2: ("🥈", self.NEON_SILVER),
+            3: ("🥉", self.NEON_BRONZE)
+        }
+        
+        for idx in range(max_rows):
+            row = rows[idx]
+            pos = idx + 1
+            
+            # Satr oralig'i
+            if pos > 1:
+                self.draw_glow_line(
+                    img,
+                    (margin + 20, row_y - 10, self.WIDTH - margin - 20, row_y - 10),
+                    (40, 80, 150)
+                )
+            
+            # Medal yoki raqam
+            if pos in medals:
+                rank_text, rank_color = medals[pos]
+            else:
+                rank_text = str(pos)
+                rank_color = self.WHITE
+            
+            # Ma'lumotlar
+            values = [
+                rank_text,
+                row["Ism"],
+                str(row["Oyinlar"]),
+                str(row["Galaba"]),
+                str(row["Durang"]),
+                str(row["Maglubiyat"]),
+                f"{row['UrganGoli']}-{row['OtkazganGoli']}",
+                f"{float(row['Achko']):.0f}"
+            ]
+            
+            colors = [
+                rank_color,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.WHITE,
+                self.NEON_BLUE,
+                self.NEON_GOLD
+            ]
+            
+            x = margin + int(self.WIDTH * 0.02)
+            font_size = int(self.WIDTH * 0.035)
+            
+            for i, value in enumerate(values):
+                # Ismni qisqartirish
+                if i == 1 and len(value) > 20:
+                    value = value[:18] + "..."
+                
+                self.draw_glow_text(
+                    img,
+                    (x, row_y),
+                    str(value),
+                    font_size,
+                    colors[i]
+                )
+                x += headers[i][1]
+            
+            row_y += row_height
+        
+        # Pastki qismdagi sana
+        date_str = datetime.now().strftime("%d.%m.%Y %H:%M")
+        self.draw_glow_text(
+            img,
+            (self.WIDTH - margin - int(self.WIDTH * 0.15), self.HEIGHT - int(self.HEIGHT * 0.02)),
+            f"📅 {date_str}",
+            int(self.WIDTH * 0.025),
+            (100, 150, 200)
+        )
+        
+        # Faylni vaqtinchalik saqlash
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                img.save(tmp.name, quality=85, optimize=True)
+                logger.info(f"✅ Rasm yaratildi: {tmp.name}")
+                return tmp.name
+        except Exception as e:
+            logger.error(f"❌ Rasm saqlashda xatolik: {e}")
+            return None
+    
+    def _generate_empty(self) -> Optional[str]:
+        """Bo'sh jadval rasmi"""
+        img = Image.new("RGBA", (self.WIDTH, self.HEIGHT), self.BG_COLOR)
+        draw = ImageDraw.Draw(img)
+        
+        # Fon gradienti
+        for y in range(self.HEIGHT):
+            c = int(10 + (y / self.HEIGHT) * 30)
+            draw.line((0, y, self.WIDTH, y), fill=(0, 0, c))
+        
+        # Xabar
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, self.HEIGHT // 2 - 50),
+            "📊 REYTING YO'Q",
+            int(self.WIDTH * 0.06),
+            self.NEON_BLUE,
+            centered=True
+        )
+        
+        self.draw_glow_text(
+            img,
+            (self.WIDTH // 2, self.HEIGHT // 2 + 50),
+            "Hali hech qanday o'yin o'tkazilmagan",
+            int(self.WIDTH * 0.03),
+            (100, 150, 200),
+            centered=True
+        )
+        
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                img.save(tmp.name, quality=85, optimize=True)
+                return tmp.name
+        except Exception as e:
+            logger.error(f"❌ Bo'sh rasm saqlashda xatolik: {e}")
+            return None
 
 # =========================
 # KOMANDALAR
@@ -497,69 +873,73 @@ def set_bot_commands(bot_obj):
         BotCommand("restart", "Botni qayta ishga tushirish"),
         BotCommand("help", "Qoidalar"),
     ]
-    bot_obj.set_my_commands(commands)
-
+    try:
+        bot_obj.set_my_commands(commands)
+        logger.info("✅ Bot komandalari o'rnatildi")
+    except Exception as e:
+        logger.error(f"❌ Komandalarni o'rnatishda xatolik: {e}")
 
 def start(update: Update, context: CallbackContext):
-    rows = get_sorted_ranking()
+    rows = get_cached_ranking()
     text = format_top_banner(rows) + "\n\n" + (
         "👋 <b>eFootball Reyting botiga xush kelibsiz!</b>\n\n"
         "Natija yuborish formati:\n"
         "<code>Ali 3-2 Vali</code>"
     )
     update.message.reply_text(text, parse_mode="HTML", reply_markup=get_reply_menu())
-
+    logger.info(f"📝 Start komandasi: {update.effective_user.full_name}")
 
 def menu_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_menu_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
-
 def help_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_help_text(), parse_mode="HTML", reply_markup=get_reply_menu())
 
-
-
-def create_table_image():
-    rows = get_sorted_ranking()
-
-    lines = ["EFOOTBALL PC REYTING", ""]
-    lines.append("№  Ism        O G D M   Gol    Achko")
-
-    for i, r in enumerate(rows, start=1):
-        name = str(r["Ism"])[:10].ljust(10)
-        lines.append(
-            f"{i:<2} {name} {r['Oyinlar']:>2} {r['Galaba']:>1} {r['Durang']:>1} "
-            f"{r['Maglubiyat']:>1} {(str(r['UrganGoli'])+'-'+str(r['OtkazganGoli'])):<6} "
-            f"{safe_float(r['Achko']):>6.0f}"
-        )
-
-    text_img = "\n".join(lines)
-
-    img = Image.new("RGB", (900, max(300, len(lines) * 35 + 50)), (20, 20, 20))
-    draw = ImageDraw.Draw(img)
-
-    try:
-        font = ImageFont.truetype("DejaVuSansMono.ttf", 24)
-    except:
-        font = ImageFont.load_default()
-
-    draw.multiline_text((20, 20), text_img, fill="white", font=font, spacing=8)
-
-    bio = BytesIO()
-    bio.name = "table.png"
-    img.save(bio, "PNG")
-    bio.seek(0)
-    return bio
-
-
 def table_cmd(update: Update, context: CallbackContext):
-    photo = create_table_image()
-    update.message.reply_photo(photo=photo, caption="🏆 Reyting jadvali", reply_markup=get_reply_menu())
-
+    """Jadvalni rasm sifatida yuborish"""
+    try:
+        # Kesh dan ma'lumotlarni olish
+        rows = get_cached_ranking()
+        
+        # Rasm yaratish
+        generator = RankingImageGenerator("telegram")
+        image_path = generator.generate(rows)
+        
+        if image_path and os.path.exists(image_path):
+            # Rasmni yuborish
+            with open(image_path, 'rb') as f:
+                update.message.reply_photo(
+                    photo=f,
+                    caption="📊 <b>EFOOTBALL PC REYTING JADVALI</b>",
+                    parse_mode="HTML",
+                    reply_markup=get_reply_menu()
+                )
+            # Vaqtinchalik faylni o'chirish
+            try:
+                os.unlink(image_path)
+            except:
+                pass
+            logger.info(f"✅ Jadval rasmi yuborildi: {update.effective_user.full_name}")
+        else:
+            # Agar rasm yaratilmagan bo'lsa, matnli versiyani yuborish
+            update.message.reply_text(
+                format_table(),
+                parse_mode="HTML",
+                reply_markup=get_reply_menu()
+            )
+            logger.warning("⚠️ Rasm yaratilmadi, matnli versiya yuborildi")
+            
+    except Exception as e:
+        logger.error(f"❌ Jadval rasmini yuborishda xatolik: {e}")
+        # Xatolik bo'lsa matnli versiyani yuborish
+        update.message.reply_text(
+            format_table(),
+            parse_mode="HTML",
+            reply_markup=get_reply_menu()
+        )
 
 def top3_cmd(update: Update, context: CallbackContext):
     update.message.reply_text(format_top3(), parse_mode="HTML", reply_markup=get_reply_menu())
-
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
@@ -579,22 +959,30 @@ def pending_cmd(update: Update, context: CallbackContext):
         )
     update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
-
 def reset_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
         update.message.reply_text("⛔ /reset faqat admin uchun.")
         return
 
-    ranking_ws.clear()
-    pending_ws.clear()
-    history_ws.clear()
+    try:
+        ranking_ws.clear()
+        pending_ws.clear()
+        history_ws.clear()
 
-    ensure_headers(ranking_ws, RANKING_HEADERS)
-    ensure_headers(pending_ws, PENDING_HEADERS)
-    ensure_headers(history_ws, HISTORY_HEADERS)
+        ensure_headers(ranking_ws, RANKING_HEADERS)
+        ensure_headers(pending_ws, PENDING_HEADERS)
+        ensure_headers(history_ws, HISTORY_HEADERS)
+        
+        # Keshni tozalash
+        global ranking_cache
+        ranking_cache["data"] = None
+        ranking_cache["timestamp"] = 0
 
-    update.message.reply_text("✅ Reyting, pending va history tozalandi.")
-
+        update.message.reply_text("✅ Reyting, pending va history tozalandi.")
+        logger.info(f"🗑️ Reyting tozalandi: {update.effective_user.full_name}")
+    except Exception as e:
+        logger.error(f"❌ Reset qilishda xatolik: {e}")
+        update.message.reply_text("❌ Reytingni tozalashda xatolik yuz berdi.")
 
 def restart_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
@@ -602,8 +990,8 @@ def restart_cmd(update: Update, context: CallbackContext):
         return
 
     update.message.reply_text("🔄 Bot qayta ishga tushirilmoqda...")
-    os.execl(os.sys.executable, os.sys.executable, *os.sys.argv)
-
+    logger.info(f"🔄 Bot qayta ishga tushirilmoqda: {update.effective_user.full_name}")
+    os.execl(sys.executable, sys.executable, *sys.argv)
 
 def handle_buttons(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -645,11 +1033,13 @@ def handle_buttons(update: Update, context: CallbackContext):
                 f"⭐ {p2}: {delta2:+.2f}",
                 parse_mode="HTML",
             )
+            # Top3 ni yangilab yuborish
             context.bot.send_message(
                 chat_id=query.message.chat_id,
                 text=format_top3(),
                 parse_mode="HTML"
             )
+            logger.info(f"✅ Natija tasdiqlandi: {pending_id} - {user.full_name}")
 
         elif action == "reject":
             set_pending_status(pending_id, "REJECTED")
@@ -657,15 +1047,18 @@ def handle_buttons(update: Update, context: CallbackContext):
                 f"❌ <b>Admin rad etdi</b>\n\n{p1} {s1}-{s2} {p2}",
                 parse_mode="HTML",
             )
+            logger.info(f"❌ Natija rad etildi: {pending_id} - {user.full_name}")
 
     except Exception as e:
-        print("BUTTON ERROR:", e)
-        context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=f"❌ Tasdiqlashda xatolik:\n<code>{esc(str(e))}</code>",
-            parse_mode="HTML",
-        )
-
+        logger.error(f"❌ Button xatoligi: {e}")
+        try:
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"❌ Tasdiqlashda xatolik:\n<code>{esc(str(e))}</code>",
+                parse_mode="HTML",
+            )
+        except:
+            pass
 
 def handle_menu_buttons_text(update: Update, context: CallbackContext):
     text = update.message.text.strip()
@@ -710,6 +1103,7 @@ def handle_menu_buttons_text(update: Update, context: CallbackContext):
         parse_mode="HTML",
         reply_markup=keyboard,
     )
+    logger.info(f"📝 Yangi natija yuborildi: {p1} {s1}-{s2} {p2} - {submitted_by.full_name}")
 
 # =========================
 # HANDLERLAR RO'YXATI
@@ -734,10 +1128,9 @@ app = Flask(__name__)
 def health():
     return "EFOOTBALL PC bot webhook is running", 200
 
-
 @app.route("/webapp", methods=["GET"])
 def webapp():
-    rows = get_sorted_ranking()
+    rows = get_cached_ranking()
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
 
     rows_html = ""
@@ -1006,7 +1399,7 @@ def webapp():
 </script>
 </body>
 </html>"""
-    return page, 200, {{"Content-Type": "text/html; charset=utf-8"}}
+    return page, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def telegram_webhook():
@@ -1014,15 +1407,17 @@ def telegram_webhook():
     dispatcher.process_update(update)
     return "ok", 200
 
-
 def setup_webhook():
     webhook_url = f"{BASE_URL}/{TOKEN}"
-    bot.delete_webhook(drop_pending_updates=True)
-    bot.set_webhook(url=webhook_url)
-    set_bot_commands(bot)
-    print(f"Webhook set: {webhook_url}")
-
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+        bot.set_webhook(url=webhook_url)
+        set_bot_commands(bot)
+        logger.info(f"✅ Webhook o'rnatildi: {webhook_url}")
+    except Exception as e:
+        logger.error(f"❌ Webhook o'rnatishda xatolik: {e}")
 
 if __name__ == "__main__":
+    logger.info("🚀 Bot ishga tushmoqda...")
     setup_webhook()
     app.run(host="0.0.0.0", port=PORT)
