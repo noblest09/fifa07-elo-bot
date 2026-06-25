@@ -39,7 +39,7 @@ INITIAL_RATING = 1000.0
 K_FACTOR = 24.0
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
-BASE_URL = os.environ["BASE_URL"].rstrip("/")  # masalan: https://fifa07-elo-bot.onrender.com
+BASE_URL = os.environ["BASE_URL"].rstrip("/")
 PORT = int(os.environ.get("PORT", 10000))
 
 # =========================
@@ -325,7 +325,7 @@ def format_top_banner(rows):
     if not rows:
         return (
             "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
-            "👑 <b>Chempion:</b> Hali yo‘q\n"
+            "👑 <b>Chempion:</b> Hali yo'q\n"
             "⭐ <b>Achko:</b> -"
         )
 
@@ -334,7 +334,7 @@ def format_top_banner(rows):
         "🏆 <b>EFOOTBALL PC REYTING BOT</b>\n\n"
         f"👑 <b>Chempion:</b> {esc(top['Ism'])}\n"
         f"⭐ <b>Achko:</b> {safe_float(top['Achko']):.2f}\n"
-        f"🎮 <b>O‘yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
+        f"🎮 <b>O'yin:</b> {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}\n"
         f"⚽ <b>Gollar:</b> {top['UrganGoli']}-{top['OtkazganGoli']}"
     )
 
@@ -342,7 +342,7 @@ def format_top_banner(rows):
 def format_top3():
     rows = get_sorted_ranking()
     if not rows:
-        return "🏅 TOP 3\n\nHali reyting yo‘q."
+        return "🏅 TOP 3\n\nHali reyting yo'q."
 
     lines = ["🏅 <b>TOP 3</b>", ""]
     medals = ["👑", "🥈", "🥉"]
@@ -360,41 +360,54 @@ def format_top3():
 def format_table():
     rows = get_sorted_ranking()
     if not rows:
-        return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o‘yinchi yo‘q."
+        return "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\nHali reytingda o'yinchi yo'q."
 
-    lines = ["🏆 <b>EFOOTBALL PC REYTING JADVALI</b>", ""]
+    medals = {1: "👑", 2: "🥈", 3: "🥉"}
 
-    top = rows[0]
-    lines.append("━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"👑 <b>1. {esc(top['Ism'])}</b>")
-    lines.append(f"⚽ O‘yin: {top['Oyinlar']} | ✅ {top['Galaba']} | 🤝 {top['Durang']} | ❌ {top['Maglubiyat']}")
-    lines.append(f"🥅 Gollar: {top['UrganGoli']}-{top['OtkazganGoli']} | ⭐ Achko: {safe_float(top['Achko']):.2f}")
-    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    # Header qismi (HTML bold)
+    title = "🏆 <b>EFOOTBALL PC REYTING JADVALI</b>\n\n"
 
-    if len(rows) >= 2:
-        second = rows[1]
-        lines.append("")
-        lines.append(f"🥈 <b>2. {esc(second['Ism'])}</b>")
-        lines.append(f"⚽ O‘yin: {second['Oyinlar']} | ✅ {second['Galaba']} | 🤝 {second['Durang']} | ❌ {second['Maglubiyat']}")
-        lines.append(f"🥅 Gollar: {second['UrganGoli']}-{second['OtkazganGoli']} | ⭐ Achko: {safe_float(second['Achko']):.2f}")
+    # Monospace jadval <pre> ichida
+    col_n    = 4   # "№"
+    col_name = 13  # "O'yinchi"
+    col_o    = 4   # O'yin
+    col_g    = 4   # G'alaba
+    col_d    = 4   # Durang
+    col_m    = 4   # Mag'lubiyat
+    col_gol  = 8   # Gollar
+    col_ach  = 8   # Achko
 
-    if len(rows) >= 3:
-        third = rows[2]
-        lines.append("")
-        lines.append(f"🥉 <b>3. {esc(third['Ism'])}</b>")
-        lines.append(f"⚽ O‘yin: {third['Oyinlar']} | ✅ {third['Galaba']} | 🤝 {third['Durang']} | ❌ {third['Maglubiyat']}")
-        lines.append(f"🥅 Gollar: {third['UrganGoli']}-{third['OtkazganGoli']} | ⭐ Achko: {safe_float(third['Achko']):.2f}")
+    sep = "─" * (col_n + col_name + col_o + col_g + col_d + col_m + col_gol + col_ach + 7)
 
-    if len(rows) > 3:
-        lines.append("")
-        lines.append("📋 <b>Qolganlar:</b>")
-        for i, row in enumerate(rows[3:], start=4):
-            lines.append(
-                f"{i}. <b>{esc(row['Ism'])}</b> — ⭐ {safe_float(row['Achko']):.2f} | "
-                f"🎮 {row['Oyinlar']} | ✅ {row['Galaba']} | 🤝 {row['Durang']} | ❌ {row['Maglubiyat']} | "
-                f"⚽ {row['UrganGoli']}-{row['OtkazganGoli']}"
-            )
-    return "\n".join(lines)
+    header_row = (
+        f"{'№':<{col_n}} {'O\'yinchi':<{col_name}} {'O\'':<{col_o}} {'G\'':<{col_g}} "
+        f"{'D':<{col_d}} {'M':<{col_m}} {'Gol':<{col_gol}} {'Achko':>{col_ach}}"
+    )
+
+    table_lines = [header_row, sep]
+
+    for i, row in enumerate(rows, start=1):
+        medal = medals.get(i, "")
+        # Medal belgisi bilan raqam (masalan: "👑1.")
+        num_str = f"{medal}{i}."
+        name = str(row['Ism'])
+        # Nom 12 belgidan uzun bo'lsa qisqartir
+        if len(name) > 12:
+            name = name[:11] + "."
+
+        gol_str = f"{row['UrganGoli']}-{row['OtkazganGoli']}"
+        achko_str = f"{safe_float(row['Achko']):.2f}"
+
+        line = (
+            f"{num_str:<{col_n}} {name:<{col_name}} "
+            f"{row['Oyinlar']:<{col_o}} {row['Galaba']:<{col_g}} "
+            f"{row['Durang']:<{col_d}} {row['Maglubiyat']:<{col_m}} "
+            f"{gol_str:<{col_gol}} {achko_str:>{col_ach}}"
+        )
+        table_lines.append(line)
+
+    table_str = "\n".join(table_lines)
+    return f"{title}<pre>{table_str}</pre>"
 
 
 def format_menu_text():
@@ -405,7 +418,7 @@ def format_menu_text():
         "Komandalar:\n"
         "/start - Boshlash\n"
         "/menu - Menyu\n"
-        "/table - To‘liq jadval\n"
+        "/table - To'liq jadval\n"
         "/top3 - Top 3\n"
         "/pending - Kutilayotgan natijalar\n"
         "/reset - Reytingni tozalash (Admin)\n"
@@ -419,9 +432,9 @@ def format_help_text():
         "ℹ️ <b>Qoidalar</b>\n\n"
         "1) Guruhdagi istalgan odam natija yuborishi mumkin.\n"
         "2) Natija darrov hisoblanmaydi.\n"
-        "3) Tasdiqlash faqat <b>Admin</b> tomonidan bo‘ladi.\n"
-        "4) Achko ELOga o‘xshash hisoblanadi.\n"
-        "5) To‘g‘ri format:\n"
+        "3) Tasdiqlash faqat <b>Admin</b> tomonidan bo'ladi.\n"
+        "4) Achko ELOga o'xshash hisoblanadi.\n"
+        "5) To'g'ri format:\n"
         "<code>Ali 4-3 Vali</code>"
     )
 
@@ -541,12 +554,12 @@ def top3_cmd(update: Update, context: CallbackContext):
 
 def pending_cmd(update: Update, context: CallbackContext):
     if not is_director(update.effective_user.id):
-        update.message.reply_text("⛔ Bu bo‘lim faqat admin uchun.")
+        update.message.reply_text("⛔ Bu bo'lim faqat admin uchun.")
         return
 
     rows = [row for _, row in pending_records() if str(row["Status"]).upper() == "PENDING"]
     if not rows:
-        update.message.reply_text("✅ Kutilayotgan natija yo‘q.")
+        update.message.reply_text("✅ Kutilayotgan natija yo'q.")
         return
 
     lines = ["⏳ <b>Kutilayotgan natijalar</b>", ""]
@@ -606,7 +619,7 @@ def handle_buttons(update: Update, context: CallbackContext):
 
         status = str(row["Status"]).upper()
         if status != "PENDING":
-            query.answer("Bu natija allaqachon ko‘rib chiqilgan.", show_alert=True)
+            query.answer("Bu natija allaqachon ko'rib chiqilgan.", show_alert=True)
             return
 
         p1 = esc(row["Player1"])
