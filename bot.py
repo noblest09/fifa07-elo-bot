@@ -379,9 +379,18 @@ def format_table():
 
     sep = "─" * (col_n + col_name + col_o + col_g + col_d + col_m + col_gol + col_ach + 7)
 
+    h_n   = "№"
+    h_nam = "O'yinchi"
+    h_o   = "O'"
+    h_g   = "G'"
+    h_d   = "D"
+    h_m   = "M"
+    h_gol = "Gol"
+    h_ach = "Achko"
+
     header_row = (
-        f"{'№':<{col_n}} {'O\'yinchi':<{col_name}} {'O\'':<{col_o}} {'G\'':<{col_g}} "
-        f"{'D':<{col_d}} {'M':<{col_m}} {'Gol':<{col_gol}} {'Achko':>{col_ach}}"
+        f"{h_n:<{col_n}} {h_nam:<{col_name}} {h_o:<{col_o}} {h_g:<{col_g}} "
+        f"{h_d:<{col_d}} {h_m:<{col_m}} {h_gol:<{col_gol}} {h_ach:>{col_ach}}"
     )
 
     table_lines = [header_row, sep]
